@@ -301,7 +301,7 @@ Upgrades::applyTo(LedgerUpgrade const& upgrade, Application& app,
     switch (upgrade.type())
     {
     case LEDGER_UPGRADE_VERSION:
-        applyVersionUpgrade(ltx, upgrade.newLedgerVersion());
+        applyVersionUpgrade(app, ltx, upgrade.newLedgerVersion());
         break;
     case LEDGER_UPGRADE_BASE_FEE:
         ltx.loadHeader().current().baseFee = upgrade.newBaseFee();
@@ -794,7 +794,7 @@ getAvailableLimitExcludingLiabilities(AccountID const& accountID,
         LedgerKey key(TRUSTLINE);
         key.trustLine().accountID = accountID;
         key.trustLine().asset = assetToTrustLineAsset(asset);
-        auto trust = ltx.loadWithoutRecord(key);
+        auto trust = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false);
         if (trust && isAuthorizedToMaintainLiabilities(trust))
         {
             auto const& tl = trust.current().data.trustLine();
@@ -1197,7 +1197,8 @@ needUpgradeToVersion(ProtocolVersion targetVersion, uint32_t prevVersion,
 }
 
 void
-Upgrades::applyVersionUpgrade(AbstractLedgerTxn& ltx, uint32_t newVersion)
+Upgrades::applyVersionUpgrade(Application& app, AbstractLedgerTxn& ltx,
+                              uint32_t newVersion)
 {
     auto header = ltx.loadHeader();
     uint32_t prevVersion = header.current().ledgerVersion;
@@ -1216,7 +1217,7 @@ Upgrades::applyVersionUpgrade(AbstractLedgerTxn& ltx, uint32_t newVersion)
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     if (needUpgradeToVersion(SOROBAN_PROTOCOL_VERSION, prevVersion, newVersion))
     {
-        SorobanNetworkConfig::createLedgerEntriesForV20(ltx);
+        SorobanNetworkConfig::createLedgerEntriesForV20(ltx, app.getConfig());
     }
 #endif
 }
@@ -1241,17 +1242,20 @@ ConfigUpgradeSetFrameConstPtr
 ConfigUpgradeSetFrame::makeFromKey(AbstractLedgerTxn& ltx,
                                    ConfigUpgradeSetKey const& key)
 {
-    auto ltxe = ltx.loadWithoutRecord(ConfigUpgradeSetFrame::getLedgerKey(key));
+    auto ltxe = ltx.loadWithoutRecord(ConfigUpgradeSetFrame::getLedgerKey(key),
+                                      /*loadExpiredEntry=*/false);
     if (!ltxe)
     {
         return nullptr;
     }
     auto const& contractData = ltxe.current().data.contractData();
-    if (contractData.val.type() != SCV_BYTES)
+    if (contractData.body.bodyType() != DATA_ENTRY ||
+        contractData.body.data().val.type() != SCV_BYTES ||
+        contractData.durability != PERSISTENT)
     {
         return nullptr;
     }
-    auto const& bytes = contractData.val.bytes();
+    auto const& bytes = contractData.body.data().val.bytes();
 
     ConfigUpgradeSet upgradeSet;
     try
@@ -1342,8 +1346,10 @@ ConfigUpgradeSetFrame::getLedgerKey(ConfigUpgradeSetKey const& upgradeKey)
 
     LedgerKey lk;
     lk.type(CONTRACT_DATA);
-    lk.contractData().contractID = upgradeKey.contractID;
+    lk.contractData().contract.type(SC_ADDRESS_TYPE_CONTRACT);
+    lk.contractData().contract.contractId() = upgradeKey.contractID;
     lk.contractData().key = v;
+    lk.contractData().durability = PERSISTENT;
     return lk;
 }
 
@@ -1360,9 +1366,9 @@ ConfigUpgradeSetFrame::upgradeNeeded(AbstractLedgerTxn& ltx,
     {
         LedgerKey key(LedgerEntryType::CONFIG_SETTING);
         key.configSetting().configSettingID = updatedEntry.configSettingID();
-        bool isSame =
-            ltx.loadWithoutRecord(key).current().data.configSetting() ==
-            updatedEntry;
+        bool isSame = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false)
+                          .current()
+                          .data.configSetting() == updatedEntry;
         if (!isSame)
         {
             return true;
@@ -1424,11 +1430,15 @@ ConfigUpgradeSetFrame::isValidForApply() const
         case ConfigSettingID::CONFIG_SETTING_CONTRACT_DATA_ENTRY_SIZE_BYTES:
             valid = configEntry.contractDataEntrySizeBytes() > 0;
             break;
+        case ConfigSettingID::CONFIG_SETTING_CONTRACT_EXECUTION_LANES:
+            valid = configEntry.contractExecutionLanes().ledgerMaxTxCount >= 0;
+            break;
         case ConfigSettingID::CONFIG_SETTING_CONTRACT_BANDWIDTH_V0:
         case ConfigSettingID::CONFIG_SETTING_CONTRACT_COMPUTE_V0:
         case ConfigSettingID::CONFIG_SETTING_CONTRACT_HISTORICAL_DATA_V0:
         case ConfigSettingID::CONFIG_SETTING_CONTRACT_LEDGER_COST_V0:
         case ConfigSettingID::CONFIG_SETTING_CONTRACT_META_DATA_V0:
+        case ConfigSettingID::CONFIG_SETTING_STATE_EXPIRATION:
             // For now none of these settings have any semantical value.
             // Validation should be implemented when implementing/tuning
             // the respective settings.

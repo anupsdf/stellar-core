@@ -35,6 +35,11 @@ mod rust_bridge {
         hash: String,
     }
 
+    struct Bump {
+        ledger_key: RustBuf,
+        min_expiration: u32,
+    }
+
     // If success is false, the only thing that may be populated is
     // diagnostic_events. The rest of the fields should be ignored.
     struct InvokeHostFunctionOutput {
@@ -43,6 +48,7 @@ mod rust_bridge {
         contract_events: Vec<RustBuf>,
         diagnostic_events: Vec<RustBuf>,
         modified_ledger_entries: Vec<RustBuf>,
+        expiration_bumps: Vec<Bump>,
         cpu_insns: u64,
         mem_bytes: u64,
     }
@@ -67,6 +73,9 @@ mod rust_bridge {
         pub network_id: Vec<u8>,
         pub base_reserve: u32,
         pub memory_limit: u32,
+        pub min_temp_entry_expiration: u32,
+        pub min_persistent_entry_expiration: u32,
+        pub max_entry_expiration: u32,
         pub cpu_cost_params: CxxBuf,
         pub mem_cost_params: CxxBuf,
     }
@@ -133,6 +142,7 @@ mod rust_bridge {
             auth_entries: &Vec<CxxBuf>,
             ledger_info: CxxLedgerInfo,
             ledger_entries: &Vec<CxxBuf>,
+            base_prng_seed: &CxxBuf,
         ) -> Result<InvokeHostFunctionOutput>;
         fn init_logging(maxLevel: LogLevel) -> Result<()>;
 
@@ -527,9 +537,10 @@ pub(crate) fn invoke_host_function(
     hf_buf: &CxxBuf,
     resources_buf: &CxxBuf,
     source_account_buf: &CxxBuf,
-    auth_entries: &Vec<CxxBuf>,    
+    auth_entries: &Vec<CxxBuf>,
     ledger_info: CxxLedgerInfo,
     ledger_entries: &Vec<CxxBuf>,
+    base_prng_seed: &CxxBuf,
 ) -> Result<InvokeHostFunctionOutput, Box<dyn std::error::Error>> {
     if ledger_info.protocol_version > config_max_protocol {
         return Err(Box::new(soroban_curr::contract::CoreHostError::General(
@@ -539,14 +550,15 @@ pub(crate) fn invoke_host_function(
     #[cfg(feature = "soroban-env-host-prev")]
     {
         if ledger_info.protocol_version == config_max_protocol - 1 {
-            return soroban_prev::contract::invoke_host_functions(
+            return soroban_prev::contract::invoke_host_function(
                 enable_diagnostics,
-                hf_bufs,
+                hf_buf,
                 resources_buf,
                 source_account_buf,
                 auth_entries,
                 ledger_info,
                 ledger_entries,
+                base_prng_seed,
             );
         }
     }
@@ -558,6 +570,7 @@ pub(crate) fn invoke_host_function(
         auth_entries,
         ledger_info,
         ledger_entries,
+        base_prng_seed,
     )
 }
 

@@ -240,9 +240,13 @@ makeConfigUpgradeSet(AbstractLedgerTxn& ltx, ConfigUpgradeSet configUpgradeSet)
 
     LedgerEntry le;
     le.data.type(CONTRACT_DATA);
-    le.data.contractData().contractID = contractID;
+    le.data.contractData().body.bodyType(DATA_ENTRY);
+    le.data.contractData().contract.type(SC_ADDRESS_TYPE_CONTRACT);
+    le.data.contractData().contract.contractId() = contractID;
+    le.data.contractData().durability = PERSISTENT;
+    le.data.contractData().expirationLedgerSeq = UINT32_MAX;
     le.data.contractData().key = key;
-    le.data.contractData().val = val;
+    le.data.contractData().body.data().val = val;
 
     ltx.create(InternalLedgerEntry(le));
 
@@ -718,9 +722,14 @@ TEST_CASE("config upgrade validation", "[upgrades]")
 
                     LedgerEntry le;
                     le.data.type(CONTRACT_DATA);
-                    le.data.contractData().contractID = contractID;
+                    le.data.contractData().body.bodyType(DATA_ENTRY);
+                    le.data.contractData().contract.type(
+                        SC_ADDRESS_TYPE_CONTRACT);
+                    le.data.contractData().contract.contractId() = contractID;
+                    le.data.contractData().durability = PERSISTENT;
+                    le.data.contractData().expirationLedgerSeq = UINT32_MAX;
                     le.data.contractData().key = key;
-                    le.data.contractData().val = val;
+                    le.data.contractData().body.data().val = val;
 
                     ltx.create(InternalLedgerEntry(le));
 
@@ -788,6 +797,7 @@ TEST_CASE("config upgrades applied to ledger", "[upgrades]")
     auto cfg = getTestConfig(0);
     cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
         static_cast<uint32_t>(SOROBAN_PROTOCOL_VERSION) - 1;
+    cfg.USE_CONFIG_FOR_GENESIS = false;
     auto app = createTestApplication(clock, cfg);
 
     // Need to actually execute the upgrade to v20 to get the config
@@ -820,6 +830,8 @@ TEST_CASE("config upgrades applied to ledger", "[upgrades]")
             configUpgradeSet = makeMaxContractSizeBytesTestUpgrade(ltx2, 32768);
             ltx2.commit();
         }
+
+        REQUIRE(configUpgradeSet);
         executeUpgrade(*app, makeConfigUpgrade(*configUpgradeSet));
 
         LedgerTxn ltx2(app->getLedgerTxnRoot());
@@ -2994,7 +3006,7 @@ TEST_CASE("upgrade to generalized tx set in network", "[upgrades][overlay]")
             }
             return loadGenDone.count() > currLoadGenCount;
         },
-        10 * Herder::EXP_LEDGER_TIMESPAN_SECONDS, false);
+        11 * Herder::EXP_LEDGER_TIMESPAN_SECONDS, false);
 
     // Make sure upgrade has happened.
     REQUIRE(upgradeLedger);
@@ -3038,7 +3050,7 @@ TEST_CASE("upgrade to generalized tx set in network", "[upgrades][overlay]")
         {
             auto txSet = getLedgerTxSet(*node, ledger);
             REQUIRE(txSet);
-            REQUIRE(txSet->sizeTx() > 0);
+            REQUIRE(txSet->sizeTxTotal() > 0);
             bool isGeneralized = ledger > *upgradeLedger;
             REQUIRE(txSet->isGeneralizedTxSet() == isGeneralized);
         }

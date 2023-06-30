@@ -49,6 +49,10 @@ getLedgerInfo(AbstractLedgerTxn& ltx, Config const& cfg,
     info.sequence_number = hdr.ledgerSeq;
     info.timestamp = hdr.scpValue.closeTime;
     info.memory_limit = sorobanConfig.txMemoryLimit();
+    info.min_persistent_entry_expiration =
+        sorobanConfig.stateExpirationSettings().minPersistentEntryExpiration;
+    info.min_temp_entry_expiration =
+        sorobanConfig.stateExpirationSettings().minTempEntryExpiration;
     info.cpu_cost_params = toCxxBuf(sorobanConfig.cpuCostParams());
     info.mem_cost_params = toCxxBuf(sorobanConfig.memCostParams());
     // TODO: move network id to config to not recompute hash
@@ -64,9 +68,12 @@ bool
 validateContractLedgerEntry(LedgerEntry const& le, size_t nByte,
                             SorobanNetworkConfig const& config)
 {
+    releaseAssert(!isSorobanEntry(le.data) || getLeType(le.data) == DATA_ENTRY);
+
     // check contract code size limit
     if (le.data.type() == CONTRACT_CODE &&
-        config.maxContractSizeBytes() < le.data.contractCode().code.size())
+        config.maxContractSizeBytes() <
+            le.data.contractCode().body.code().size())
     {
         return false;
     }
@@ -94,12 +101,6 @@ InvokeHostFunctionOpFrame::InvokeHostFunctionOpFrame(Operation const& op,
 {
 }
 
-ThresholdLevel
-InvokeHostFunctionOpFrame::getThresholdLevel() const
-{
-    return ThresholdLevel::LOW;
-}
-
 bool
 InvokeHostFunctionOpFrame::isOpSupported(LedgerHeader const& header) const
 {
@@ -109,7 +110,8 @@ InvokeHostFunctionOpFrame::isOpSupported(LedgerHeader const& header) const
 bool
 InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
-    throw std::runtime_error("InvokeHostFunctionOpFrame::doApply needs Config");
+    throw std::runtime_error(
+        "InvokeHostFunctionOpFrame::doApply needs Config and base PRNG seed");
 }
 
 void
@@ -262,7 +264,8 @@ struct HostFunctionMetrics
 };
 
 bool
-InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx)
+InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
+                                   Hash const& sorobanBasePrngSeed)
 {
     Config const& cfg = app.getConfig();
     HostFunctionMetrics metrics(app.getMetrics());
@@ -271,16 +274,18 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx)
 
     // Get the entries for the footprint
     rust::Vec<CxxBuf> ledgerEntryCxxBufs;
+    UnorderedMap<LedgerKey, uint32_t> originalExpirations;
     auto const& resources = mParentTx.sorobanResources();
     auto const& footprint = resources.footprint;
-    ledgerEntryCxxBufs.reserve(footprint.readOnly.size() +
-                               footprint.readWrite.size());
-    auto addReads = [&ledgerEntryCxxBufs, &ltx, &metrics,
-                     &sorobanConfig](auto const& keys) -> bool {
+    auto reserveSize = footprint.readOnly.size() + footprint.readWrite.size();
+    ledgerEntryCxxBufs.reserve(reserveSize);
+
+    auto addReads = [&ledgerEntryCxxBufs, &ltx, &metrics, &sorobanConfig,
+                     &originalExpirations](auto const& keys) -> bool {
         for (auto const& lk : keys)
         {
             // Load without record for readOnly to avoid writing them later
-            auto ltxe = ltx.loadWithoutRecord(lk);
+            auto ltxe = ltx.loadWithoutRecord(lk, /*loadExpiredEntry=*/false);
             size_t nByte{0};
             if (ltxe)
             {
@@ -296,6 +301,11 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx)
                     return false;
                 }
                 ledgerEntryCxxBufs.emplace_back(std::move(buf));
+                if (isSorobanEntry(le.data))
+                {
+                    originalExpirations.emplace(LedgerEntryKey(le),
+                                                getExpirationLedger(le));
+                }
             }
             metrics.noteReadEntry(lk, nByte);
         }
@@ -341,12 +351,17 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx)
     try
     {
         auto timeScope = metrics.getExecTimer();
+        CxxBuf basePrngSeedBuf;
+        basePrngSeedBuf.data = std::make_unique<std::vector<uint8_t>>();
+        basePrngSeedBuf.data->assign(sorobanBasePrngSeed.begin(),
+                                     sorobanBasePrngSeed.end());
 
         out = rust_bridge::invoke_host_function(
             cfg.CURRENT_LEDGER_PROTOCOL_VERSION,
             cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS, hostFnCxxBuf,
             toCxxBuf(resources), toCxxBuf(getSourceID()), authEntryCxxBufs,
-            getLedgerInfo(ltx, cfg, sorobanConfig), ledgerEntryCxxBufs);
+            getLedgerInfo(ltx, cfg, sorobanConfig), ledgerEntryCxxBufs,
+            basePrngSeedBuf);
 
         if (out.success)
         {
@@ -410,6 +425,25 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx)
 
         keys.emplace(std::move(lk));
     }
+
+    for (auto const& bumps : out.expiration_bumps)
+    {
+        LedgerKey lk;
+        xdr::xdr_from_opaque(bumps.ledger_key.data, lk);
+
+        auto minExpirationLedger = bumps.min_expiration;
+
+        if (!isSorobanEntry(lk))
+        {
+            continue;
+        }
+        auto ltxe = ltx.load(lk);
+        if (ltxe && getExpirationLedger(ltxe.current()) <= minExpirationLedger)
+        {
+            setExpirationLedger(ltxe.current(), minExpirationLedger);
+        }
+    }
+
     metrics.mMetadataSizeByte += metrics.mLedgerWriteByte;
     if (resources.extendedMetaDataSizeBytes < metrics.mMetadataSizeByte)
     {
@@ -458,6 +492,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx)
 
     mParentTx.pushContractEvents(std::move(success.events));
     mParentTx.setReturnValue(std::move(success.returnValue));
+    mParentTx.pushInitialExpirations(std::move(originalExpirations));
     return true;
 }
 

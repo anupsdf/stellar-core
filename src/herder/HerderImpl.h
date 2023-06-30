@@ -170,7 +170,11 @@ class HerderImpl : public Herder
     // used for testing
     PendingEnvelopes& getPendingEnvelopes();
 
-    TransactionQueue& getTransactionQueue() override;
+    ClassicTransactionQueue& getTransactionQueue() override;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    SorobanTransactionQueue& getSorobanTransactionQueue() override;
+#endif
+    bool sourceAccountPending(AccountID const& accountID) const override;
 #endif
 
     // helper function to verify envelopes are signed
@@ -182,6 +186,9 @@ class HerderImpl : public Herder
     bool verifyStellarValueSignature(StellarValue const& sv);
 
     size_t getMaxQueueSizeOps() const override;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    size_t getMaxQueueSizeSorobanOps() const override;
+#endif
     bool isBannedTx(Hash const& hash) const override;
     TransactionFrameBaseConstPtr getTx(Hash const& hash) const override;
 
@@ -208,10 +215,12 @@ class HerderImpl : public Herder
     void newSlotExternalized(bool synchronous, StellarValue const& value);
     void purgeOldPersistedTxSets();
 
-    TransactionQueue mTransactionQueue;
+    ClassicTransactionQueue mTransactionQueue;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    SorobanTransactionQueue mSorobanTransactionQueue;
+#endif
 
-    void
-    updateTransactionQueue(std::vector<TransactionFrameBasePtr> const& applied);
+    void updateTransactionQueue(TxSetFrameConstPtr txSet);
 
     PendingEnvelopes mPendingEnvelopes;
     Upgrades mUpgrades;

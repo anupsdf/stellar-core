@@ -228,7 +228,7 @@ LedgerManagerImpl::startNewLedger(LedgerHeader const& genesisLedger)
     if (cfg.USE_CONFIG_FOR_GENESIS)
     {
         SorobanNetworkConfig::initializeGenesisLedgerForTesting(
-            cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION, ltx);
+            cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION, ltx, mApp.getConfig());
     }
 
     LedgerEntry rootEntry;
@@ -431,6 +431,29 @@ LedgerManagerImpl::getLastMaxTxSetSizeOps() const
                : (n * MAX_OPS_PER_TX);
 }
 
+Resource
+LedgerManagerImpl::maxLedgerResources(bool isSoroban,
+                                      AbstractLedgerTxn& ltxOuter)
+{
+    if (isSoroban)
+    {
+        auto conf = getSorobanNetworkConfig(ltxOuter);
+        std::vector<int64_t> limits = {conf.ledgerMaxTxCount(),
+                                       conf.ledgerMaxInstructions(),
+                                       conf.ledgerMaxPropagateSizeBytes(),
+                                       conf.ledgerMaxReadBytes(),
+                                       conf.ledgerMaxWriteBytes(),
+                                       conf.ledgerMaxReadLedgerEntries(),
+                                       conf.ledgerMaxWriteLedgerEntries()};
+        return Resource(limits);
+    }
+    else
+    {
+        uint32_t maxOpsLedger = getLastMaxTxSetSizeOps();
+        return Resource(maxOpsLedger);
+    }
+}
+
 int64_t
 LedgerManagerImpl::getLastMinBalance(uint32_t ownerCount) const
 {
@@ -507,7 +530,8 @@ LedgerManagerImpl::valueExternalized(LedgerCloseData const& ledgerData)
               "Got consensus: [seq={}, prev={}, txs={}, ops={}, sv: {}]",
               ledgerData.getLedgerSeq(),
               hexAbbrev(ledgerData.getTxSet()->previousLedgerHash()),
-              ledgerData.getTxSet()->sizeTx(), ledgerData.getTxSet()->sizeOp(),
+              ledgerData.getTxSet()->sizeTxTotal(),
+              ledgerData.getTxSet()->sizeOpTotal(),
               stellarValueToString(mApp.getConfig(), ledgerData.getValue()));
 
     auto st = getState();
@@ -727,7 +751,7 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
         // this method throw.
         ledgerCloseMeta = std::make_unique<LedgerCloseMetaFrame>(
             header.current().ledgerVersion);
-        ledgerCloseMeta->reserveTxProcessing(txSet->sizeTx());
+        ledgerCloseMeta->reserveTxProcessing(txSet->sizeTxTotal());
         ledgerCloseMeta->populateTxSet(*txSet);
     }
 
@@ -884,7 +908,7 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
             mApp.getConfig().OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.begin(),
             mApp.getConfig().OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.end());
         std::chrono::microseconds sleepFor{0};
-        auto txSetSizeOp = txSet->sizeOp();
+        auto txSetSizeOp = txSet->sizeOpTotal();
         for (size_t i = 0; i < txSetSizeOp; i++)
         {
             sleepFor +=
@@ -1280,7 +1304,7 @@ LedgerManagerImpl::applyTransactions(
 
     // Record counts
     auto numTxs = txs.size();
-    auto numOps = txSet.sizeOp();
+    auto numOps = txSet.sizeOpTotal();
     if (numTxs > 0)
     {
         mTransactionCount.Update(static_cast<int64_t>(numTxs));
@@ -1294,6 +1318,9 @@ LedgerManagerImpl::applyTransactions(
 
     prefetchTransactionData(txs);
 
+    Hash sorobanBasePrngSeed = txSet.getContentsHash();
+    uint64_t txNum{0};
+
     for (auto tx : txs)
     {
         ZoneNamedN(txZone, "applyTransaction", true);
@@ -1303,7 +1330,19 @@ LedgerManagerImpl::applyTransactions(
                    hexAbbrev(tx->getContentsHash()), tx->getNumOperations(),
                    tx->getSeqNum(),
                    mApp.getConfig().toShortString(tx->getSourceID()));
-        tx->apply(mApp, ltx, tm);
+
+        Hash subSeed = sorobanBasePrngSeed;
+        // If tx can use the seed, we need to compute a sub-seed for it.
+        if (tx->isSoroban())
+        {
+            SHA256 subSeedSha;
+            subSeedSha.add(sorobanBasePrngSeed);
+            subSeedSha.add(xdr::xdr_to_opaque(txNum));
+            subSeed = subSeedSha.finish();
+        }
+        ++txNum;
+
+        tx->apply(mApp, ltx, tm, subSeed);
         tx->processPostApply(mApp, ltx, tm);
         TransactionResultPair results;
         results.transactionHash = tx->getContentsHash();

@@ -23,7 +23,7 @@ createConfigSettingEntry(ConfigSettingEntry const& configSetting,
 }
 
 ConfigSettingEntry
-initialMaxContractSizeEntry()
+initialMaxContractSizeEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES);
 
@@ -34,7 +34,7 @@ initialMaxContractSizeEntry()
 }
 
 ConfigSettingEntry
-initialMaxContractDataKeySizeEntry()
+initialMaxContractDataKeySizeEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_DATA_KEY_SIZE_BYTES);
 
@@ -45,7 +45,7 @@ initialMaxContractDataKeySizeEntry()
 }
 
 ConfigSettingEntry
-initialMaxContractDataEntrySizeEntry()
+initialMaxContractDataEntrySizeEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_DATA_ENTRY_SIZE_BYTES);
 
@@ -56,13 +56,20 @@ initialMaxContractDataEntrySizeEntry()
 }
 
 ConfigSettingEntry
-initialContractComputeSettingsEntry()
+initialContractComputeSettingsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_COMPUTE_V0);
     auto& e = entry.contractCompute();
 
-    e.ledgerMaxInstructions =
-        InitialSorobanNetworkConfig::LEDGER_MAX_INSTRUCTIONS;
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxInstructions = cfg.TESTING_LEDGER_MAX_INSTRUCTIONS;
+    }
+    else
+    {
+        e.ledgerMaxInstructions =
+            InitialSorobanNetworkConfig::LEDGER_MAX_INSTRUCTIONS;
+    }
     e.txMaxInstructions = InitialSorobanNetworkConfig::TX_MAX_INSTRUCTIONS;
     e.feeRatePerInstructionsIncrement =
         InitialSorobanNetworkConfig::FEE_RATE_PER_INSTRUCTIONS_INCREMENT;
@@ -72,17 +79,49 @@ initialContractComputeSettingsEntry()
 }
 
 ConfigSettingEntry
-initialContractLedgerAccessSettingsEntry()
+initialContractLedgerAccessSettingsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_LEDGER_COST_V0);
     auto& e = entry.contractLedgerCost();
 
-    e.ledgerMaxReadLedgerEntries =
-        InitialSorobanNetworkConfig::LEDGER_MAX_READ_LEDGER_ENTRIES;
-    e.ledgerMaxReadBytes = InitialSorobanNetworkConfig::LEDGER_MAX_READ_BYTES;
-    e.ledgerMaxWriteLedgerEntries =
-        InitialSorobanNetworkConfig::LEDGER_MAX_WRITE_LEDGER_ENTRIES;
-    e.ledgerMaxWriteBytes = InitialSorobanNetworkConfig::LEDGER_MAX_WRITE_BYTES;
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxReadLedgerEntries =
+            cfg.TESTING_LEDGER_MAX_READ_LEDGER_ENTRIES;
+    }
+    else
+    {
+        e.ledgerMaxReadLedgerEntries =
+            InitialSorobanNetworkConfig::LEDGER_MAX_READ_LEDGER_ENTRIES;
+    }
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxReadBytes = cfg.TESTING_LEDGER_MAX_READ_BYTES;
+    }
+    else
+    {
+        e.ledgerMaxReadBytes =
+            InitialSorobanNetworkConfig::LEDGER_MAX_READ_BYTES;
+    }
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxWriteLedgerEntries =
+            cfg.TESTING_LEDGER_MAX_WRITE_LEDGER_ENTRIES;
+    }
+    else
+    {
+        e.ledgerMaxWriteLedgerEntries =
+            InitialSorobanNetworkConfig::LEDGER_MAX_WRITE_LEDGER_ENTRIES;
+    }
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxWriteBytes = cfg.TESTING_LEDGER_MAX_WRITE_BYTES;
+    }
+    else
+    {
+        e.ledgerMaxWriteBytes =
+            InitialSorobanNetworkConfig::LEDGER_MAX_WRITE_BYTES;
+    }
     e.txMaxReadLedgerEntries =
         InitialSorobanNetworkConfig::TX_MAX_READ_LEDGER_ENTRIES;
     e.txMaxReadBytes = InitialSorobanNetworkConfig::TX_MAX_READ_BYTES;
@@ -105,7 +144,7 @@ initialContractLedgerAccessSettingsEntry()
 }
 
 ConfigSettingEntry
-initialContractHistoricalDataSettingsEntry()
+initialContractHistoricalDataSettingsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_HISTORICAL_DATA_V0);
     auto& e = entry.contractHistoricalData();
@@ -116,7 +155,7 @@ initialContractHistoricalDataSettingsEntry()
 }
 
 ConfigSettingEntry
-initialContractMetaDataSettingsEntry()
+initialContractMetaDataSettingsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_META_DATA_V0);
     auto& e = entry.contractMetaData();
@@ -130,13 +169,21 @@ initialContractMetaDataSettingsEntry()
 }
 
 ConfigSettingEntry
-initialContractBandwidthSettingsEntry()
+initialContractBandwidthSettingsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_BANDWIDTH_V0);
     auto& e = entry.contractBandwidth();
 
-    e.ledgerMaxPropagateSizeBytes =
-        InitialSorobanNetworkConfig::LEDGER_MAX_PROPAGATE_SIZE_BYTES;
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxPropagateSizeBytes =
+            cfg.TESTING_LEDGER_MAX_PROPAGATE_SIZE_BYTES;
+    }
+    else
+    {
+        e.ledgerMaxPropagateSizeBytes =
+            InitialSorobanNetworkConfig::LEDGER_MAX_PROPAGATE_SIZE_BYTES;
+    }
     e.txMaxSizeBytes = InitialSorobanNetworkConfig::TX_MAX_SIZE_BYTES;
     e.feePropagateData1KB = InitialSorobanNetworkConfig::FEE_PROPAGATE_DATA_1KB;
 
@@ -144,7 +191,25 @@ initialContractBandwidthSettingsEntry()
 }
 
 ConfigSettingEntry
-initialCpuCostParamsEntry()
+initialContractExecutionLanesSettingsEntry(Config const& cfg)
+{
+    ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_EXECUTION_LANES);
+    auto& e = entry.contractExecutionLanes();
+
+    if (cfg.USE_CONFIG_FOR_GENESIS)
+    {
+        e.ledgerMaxTxCount = cfg.TESTING_LEDGER_MAX_SOROBAN_TX_COUNT;
+    }
+    else
+    {
+        e.ledgerMaxTxCount = InitialSorobanNetworkConfig::LEDGER_MAX_TX_COUNT;
+    }
+
+    return entry;
+}
+
+ConfigSettingEntry
+initialCpuCostParamsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(
         CONFIG_SETTING_CONTRACT_COST_PARAMS_CPU_INSTRUCTIONS);
@@ -157,68 +222,99 @@ initialCpuCostParamsEntry()
         switch (val)
         {
         case WasmInsnExec:
-            params[val] = ContractCostParamEntry{22, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 7, 0};
             break;
         case WasmMemAlloc:
-            params[val] = ContractCostParamEntry{521, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case HostMemAlloc:
-            params[val] = ContractCostParamEntry{883, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 2350, 0};
             break;
         case HostMemCpy:
-            params[val] = ContractCostParamEntry{24, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 23, 0};
             break;
         case HostMemCmp:
-            params[val] = ContractCostParamEntry{42, 1, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 43, 1};
             break;
         case InvokeHostFunction:
-            params[val] = ContractCostParamEntry{759, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 928, 0};
             break;
         case VisitObject:
-            params[val] = ContractCostParamEntry{29, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 19, 0};
             break;
         case ValXdrConv:
-            params[val] = ContractCostParamEntry{177, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 134, 0};
             break;
         case ValSer:
-            params[val] = ContractCostParamEntry{741, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 587, 1};
             break;
         case ValDeser:
-            params[val] = ContractCostParamEntry{846, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 870, 0};
             break;
         case ComputeSha256Hash:
-            params[val] = ContractCostParamEntry{1912, 32, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 1725, 33};
             break;
         case ComputeEd25519PubKey:
-            params[val] = ContractCostParamEntry{25766, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 25551, 0};
             break;
         case MapEntry:
-            params[val] = ContractCostParamEntry{59, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 53, 0};
             break;
         case VecEntry:
-            params[val] = ContractCostParamEntry{14, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 5, 0};
             break;
         case GuardFrame:
-            params[val] = ContractCostParamEntry{4512, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 4050, 0};
             break;
         case VerifyEd25519Sig:
-            params[val] = ContractCostParamEntry{368361, 20, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 369634, 21};
             break;
         case VmMemRead:
-            params[val] = ContractCostParamEntry{95, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case VmMemWrite:
-            params[val] = ContractCostParamEntry{97, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 124, 0};
             break;
         case VmInstantiation:
             params[val] =
-                ContractCostParamEntry{1'000'000, 0, ExtensionPoint{0}};
+                ContractCostParamEntry{ExtensionPoint{0}, 600447, 484};
+            break;
+        case VmCachedInstantiation:
+            params[val] =
+                ContractCostParamEntry{ExtensionPoint{0}, 600447, 484};
             break;
         case InvokeVmFunction:
-            params[val] = ContractCostParamEntry{6212, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 5926, 0};
             break;
         case ChargeBudget:
-            params[val] = ContractCostParamEntry{198, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 130, 0};
+            break;
+        case ComputeKeccak256Hash:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 3322, 46};
+            break;
+        case ComputeEcdsaSecp256k1Key:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 56525, 0};
+            break;
+        case ComputeEcdsaSecp256k1Sig:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 250, 0};
+            break;
+        case RecoverEcdsaSecp256k1Key:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 2319640, 0};
+            break;
+        case Int256AddSub:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 735, 0};
+            break;
+        case Int256Mul:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 1224, 0};
+            break;
+        case Int256Div:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 1347, 0};
+            break;
+        case Int256Pow:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 5350, 0};
+            break;
+        case Int256Shift:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 538, 0};
             break;
         }
     }
@@ -227,7 +323,24 @@ initialCpuCostParamsEntry()
 }
 
 ConfigSettingEntry
-initialMemCostParamsEntry()
+initialStateExpirationSettings()
+{
+    ConfigSettingEntry entry(CONFIG_SETTING_STATE_EXPIRATION);
+
+    entry.stateExpirationSettings().autoBumpLedgers =
+        InitialSorobanNetworkConfig::AUTO_BUMP_NUM_LEDGERS;
+    entry.stateExpirationSettings().maxEntryExpiration =
+        InitialSorobanNetworkConfig::MAXIMUM_ENTRY_LIFETIME;
+    entry.stateExpirationSettings().minPersistentEntryExpiration =
+        InitialSorobanNetworkConfig::MINIMUM_PERSISTENT_ENTRY_LIFETIME;
+    entry.stateExpirationSettings().minTempEntryExpiration =
+        InitialSorobanNetworkConfig::MINIMUM_TEMP_ENTRY_LIFETIME;
+
+    return entry;
+}
+
+ConfigSettingEntry
+initialMemCostParamsEntry(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_COST_PARAMS_MEMORY_BYTES);
 
@@ -239,68 +352,97 @@ initialMemCostParamsEntry()
         switch (val)
         {
         case WasmInsnExec:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case WasmMemAlloc:
-            params[val] = ContractCostParamEntry{66136, 1, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 1, 0};
             break;
         case HostMemAlloc:
-            params[val] = ContractCostParamEntry{8, 1, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 8, 1};
             break;
         case HostMemCpy:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case HostMemCmp:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case InvokeHostFunction:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case VisitObject:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case ValXdrConv:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case ValSer:
-            params[val] = ContractCostParamEntry{9, 3, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 9, 3};
             break;
         case ValDeser:
-            params[val] = ContractCostParamEntry{4, 1, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 4, 1};
             break;
         case ComputeSha256Hash:
-            params[val] = ContractCostParamEntry{40, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 40, 0};
             break;
         case ComputeEd25519PubKey:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case MapEntry:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case VecEntry:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case GuardFrame:
-            params[val] = ContractCostParamEntry{267, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 472, 0};
             break;
         case VerifyEd25519Sig:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case VmMemRead:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case VmMemWrite:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
             break;
         case VmInstantiation:
-            params[val] =
-                ContractCostParamEntry{1'100'000, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 117871, 40};
+            break;
+        case VmCachedInstantiation:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 117871, 40};
             break;
         case InvokeVmFunction:
-            params[val] = ContractCostParamEntry{267, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 486, 0};
             break;
         case ChargeBudget:
-            params[val] = ContractCostParamEntry{0, 0, ExtensionPoint{0}};
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
+            break;
+        case ComputeKeccak256Hash:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 40, 0};
+            break;
+        case ComputeEcdsaSecp256k1Key:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
+            break;
+        case ComputeEcdsaSecp256k1Sig:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 0, 0};
+            break;
+        case RecoverEcdsaSecp256k1Key:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 181, 0};
+            break;
+        case Int256AddSub:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 119, 0};
+            break;
+        case Int256Mul:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 119, 0};
+            break;
+        case Int256Div:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 119, 0};
+            break;
+        case Int256Pow:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 119, 0};
+            break;
+        case Int256Shift:
+            params[val] = ContractCostParamEntry{ExtensionPoint{0}, 119, 0};
             break;
         }
     }
@@ -312,29 +454,35 @@ initialMemCostParamsEntry()
 }
 
 void
-SorobanNetworkConfig::createLedgerEntriesForV20(AbstractLedgerTxn& ltx)
+SorobanNetworkConfig::createLedgerEntriesForV20(AbstractLedgerTxn& ltx,
+                                                Config const& cfg)
 {
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    createConfigSettingEntry(initialMaxContractSizeEntry(), ltx);
-    createConfigSettingEntry(initialMaxContractDataKeySizeEntry(), ltx);
-    createConfigSettingEntry(initialMaxContractDataEntrySizeEntry(), ltx);
-    createConfigSettingEntry(initialContractComputeSettingsEntry(), ltx);
-    createConfigSettingEntry(initialContractLedgerAccessSettingsEntry(), ltx);
-    createConfigSettingEntry(initialContractHistoricalDataSettingsEntry(), ltx);
-    createConfigSettingEntry(initialContractMetaDataSettingsEntry(), ltx);
-    createConfigSettingEntry(initialContractBandwidthSettingsEntry(), ltx);
-    createConfigSettingEntry(initialCpuCostParamsEntry(), ltx);
-    createConfigSettingEntry(initialMemCostParamsEntry(), ltx);
+    createConfigSettingEntry(initialMaxContractSizeEntry(cfg), ltx);
+    createConfigSettingEntry(initialMaxContractDataKeySizeEntry(cfg), ltx);
+    createConfigSettingEntry(initialMaxContractDataEntrySizeEntry(cfg), ltx);
+    createConfigSettingEntry(initialContractComputeSettingsEntry(cfg), ltx);
+    createConfigSettingEntry(initialContractLedgerAccessSettingsEntry(cfg),
+                             ltx);
+    createConfigSettingEntry(initialContractHistoricalDataSettingsEntry(cfg),
+                             ltx);
+    createConfigSettingEntry(initialContractMetaDataSettingsEntry(cfg), ltx);
+    createConfigSettingEntry(initialContractBandwidthSettingsEntry(cfg), ltx);
+    createConfigSettingEntry(initialContractExecutionLanesSettingsEntry(cfg),
+                             ltx);
+    createConfigSettingEntry(initialCpuCostParamsEntry(cfg), ltx);
+    createConfigSettingEntry(initialMemCostParamsEntry(cfg), ltx);
+    createConfigSettingEntry(initialStateExpirationSettings(), ltx);
 #endif
 }
 
 void
 SorobanNetworkConfig::initializeGenesisLedgerForTesting(
-    uint32_t genesisLedgerProtocol, AbstractLedgerTxn& ltx)
+    uint32_t genesisLedgerProtocol, AbstractLedgerTxn& ltx, Config const& cfg)
 {
     if (protocolVersionStartsFrom(genesisLedgerProtocol, ProtocolVersion::V_20))
     {
-        SorobanNetworkConfig::createLedgerEntriesForV20(ltx);
+        SorobanNetworkConfig::createLedgerEntriesForV20(ltx, cfg);
     }
 }
 
@@ -352,6 +500,8 @@ SorobanNetworkConfig::loadFromLedger(AbstractLedgerTxn& ltxRoot)
     loadBandwidthSettings(ltx);
     loadCpuCostParams(ltx);
     loadMemCostParams(ltx);
+    loadStateExpirationSettings(ltx);
+    loadExecutionLanesSettings(ltx);
 }
 
 void
@@ -361,7 +511,7 @@ SorobanNetworkConfig::loadMaxContractSize(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     mMaxContractSizeBytes = le.data.configSetting().contractMaxSizeBytes();
 #endif
 }
@@ -373,7 +523,7 @@ SorobanNetworkConfig::loadMaxContractDataKeySize(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_DATA_KEY_SIZE_BYTES;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     mMaxContractDataKeySizeBytes =
         le.data.configSetting().contractDataKeySizeBytes();
 #endif
@@ -386,7 +536,7 @@ SorobanNetworkConfig::loadMaxContractDataEntrySize(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_DATA_ENTRY_SIZE_BYTES;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     mMaxContractDataEntrySizeBytes =
         le.data.configSetting().contractDataEntrySizeBytes();
 #endif
@@ -399,7 +549,7 @@ SorobanNetworkConfig::loadComputeSettings(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_COMPUTE_V0;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     auto const& configSetting = le.data.configSetting().contractCompute();
     mLedgerMaxInstructions = configSetting.ledgerMaxInstructions;
     mTxMaxInstructions = configSetting.txMaxInstructions;
@@ -416,7 +566,7 @@ SorobanNetworkConfig::loadLedgerAccessSettings(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_LEDGER_COST_V0;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     auto const& configSetting = le.data.configSetting().contractLedgerCost();
     mLedgerMaxReadLedgerEntries = configSetting.ledgerMaxReadLedgerEntries;
     mLedgerMaxReadBytes = configSetting.ledgerMaxReadBytes;
@@ -444,7 +594,7 @@ SorobanNetworkConfig::loadHistoricalSettings(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_HISTORICAL_DATA_V0;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     auto const& configSetting =
         le.data.configSetting().contractHistoricalData();
     mFeeHistorical1KB = configSetting.feeHistorical1KB;
@@ -458,7 +608,7 @@ SorobanNetworkConfig::loadMetaDataSettings(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_META_DATA_V0;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     auto const& configSetting = le.data.configSetting().contractMetaData();
     mFeeExtendedMetaData1KB = configSetting.feeExtendedMetaData1KB;
     mTxMaxExtendedMetaDataSizeBytes =
@@ -473,7 +623,7 @@ SorobanNetworkConfig::loadBandwidthSettings(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_BANDWIDTH_V0;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     auto const& configSetting = le.data.configSetting().contractBandwidth();
     mLedgerMaxPropagateSizeBytes = configSetting.ledgerMaxPropagateSizeBytes;
     mTxMaxSizeBytes = configSetting.txMaxSizeBytes;
@@ -488,7 +638,7 @@ SorobanNetworkConfig::loadCpuCostParams(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_COST_PARAMS_CPU_INSTRUCTIONS;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     mCpuCostParams = le.data.configSetting().contractCostParamsCpuInsns();
 #endif
 }
@@ -500,8 +650,22 @@ SorobanNetworkConfig::loadMemCostParams(AbstractLedgerTxn& ltx)
     LedgerKey key(CONFIG_SETTING);
     key.configSetting().configSettingID =
         ConfigSettingID::CONFIG_SETTING_CONTRACT_COST_PARAMS_MEMORY_BYTES;
-    auto le = ltx.loadWithoutRecord(key).current();
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
     mMemCostParams = le.data.configSetting().contractCostParamsMemBytes();
+#endif
+}
+
+void
+SorobanNetworkConfig::loadExecutionLanesSettings(AbstractLedgerTxn& ltx)
+{
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    LedgerKey key(CONFIG_SETTING);
+    key.configSetting().configSettingID =
+        ConfigSettingID::CONFIG_SETTING_CONTRACT_EXECUTION_LANES;
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
+    auto const& configSetting =
+        le.data.configSetting().contractExecutionLanes();
+    mLedgerMaxTxCount = configSetting.ledgerMaxTxCount;
 #endif
 }
 
@@ -521,6 +685,19 @@ uint32_t
 SorobanNetworkConfig::maxContractDataEntrySizeBytes() const
 {
     return mMaxContractDataEntrySizeBytes;
+}
+
+void
+SorobanNetworkConfig::loadStateExpirationSettings(AbstractLedgerTxn& ltx)
+{
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    LedgerKey key(CONFIG_SETTING);
+    key.configSetting().configSettingID =
+        ConfigSettingID::CONFIG_SETTING_STATE_EXPIRATION;
+    auto le = ltx.loadWithoutRecord(key, /*loadExpiredEntry=*/false).current();
+    mStateExpirationSettings =
+        le.data.configSetting().stateExpirationSettings();
+#endif
 }
 
 // Compute settings for contracts (instructions and memory).
@@ -684,6 +861,13 @@ SorobanNetworkConfig::feePropagateData1KB() const
     return mFeePropagateData1KB;
 }
 
+// General execution lanes settings for contracts
+uint32_t
+SorobanNetworkConfig::ledgerMaxTxCount() const
+{
+    return mLedgerMaxTxCount;
+}
+
 #ifdef BUILD_TESTS
 uint32_t&
 SorobanNetworkConfig::maxContractDataKeySizeBytes()
@@ -711,6 +895,20 @@ SorobanNetworkConfig::memCostParams() const
 {
     return mMemCostParams;
 }
+
+StateExpirationSettings const&
+SorobanNetworkConfig::stateExpirationSettings() const
+{
+    return mStateExpirationSettings;
+}
+
+#ifdef BUILD_TESTS
+StateExpirationSettings&
+SorobanNetworkConfig::stateExpirationSettings()
+{
+    return mStateExpirationSettings;
+}
+#endif
 
 bool
 SorobanNetworkConfig::isValidCostParams(ContractCostParams const& params)

@@ -12,6 +12,7 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/NetworkConfig.h"
+#include "ledger/test/LedgerTestUtils.h"
 #include "lib/catch.hpp"
 #include "lib/json/json.h"
 #include "main/Application.h"
@@ -2529,11 +2530,18 @@ TEST_CASE("soroban transaction validation", "[tx][envelope][soroban]")
     resources.writeBytes = InitialSorobanNetworkConfig::TX_MAX_WRITE_BYTES;
     resources.extendedMetaDataSizeBytes =
         InitialSorobanNetworkConfig::TX_MAX_EXTENDED_META_DATA_SIZE_BYTES;
-    resources.footprint.readOnly.resize(
-        InitialSorobanNetworkConfig::TX_MAX_READ_LEDGER_ENTRIES -
-        InitialSorobanNetworkConfig::TX_MAX_WRITE_LEDGER_ENTRIES);
-    resources.footprint.readWrite.resize(
-        InitialSorobanNetworkConfig::TX_MAX_WRITE_LEDGER_ENTRIES);
+
+    auto keys =
+        LedgerTestUtils::generateValidUniqueLedgerEntryKeysWithExclusions(
+            {}, InitialSorobanNetworkConfig::TX_MAX_READ_LEDGER_ENTRIES);
+
+    resources.footprint.readWrite.assign(
+        keys.begin(),
+        keys.begin() +
+            InitialSorobanNetworkConfig::TX_MAX_WRITE_LEDGER_ENTRIES);
+    resources.footprint.readOnly.assign(
+        keys.begin() + InitialSorobanNetworkConfig::TX_MAX_WRITE_LEDGER_ENTRIES,
+        keys.end());
     SECTION("instructions exceeded")
     {
         resources.instructions += 1;
@@ -2578,7 +2586,7 @@ TEST_CASE("soroban transaction validation", "[tx][envelope][soroban]")
         ihf.type(HOST_FUNCTION_TYPE_INVOKE_CONTRACT);
         SCVal largeVal(SCV_BYTES);
         largeVal.bytes().resize(InitialSorobanNetworkConfig::TX_MAX_SIZE_BYTES -
-                                2000);
+                                3000);
         ihf.invokeContract().push_back(largeVal);
         SECTION("near limit")
         {
@@ -2689,7 +2697,8 @@ TEST_CASE("soroban transaction validation", "[tx][envelope][soroban]")
         SECTION("success with default limits")
         {
             resources.footprint.readOnly.back() = contractDataKey(
-                Hash{}, makeSymbol("abcdefghijklmnopqrstuvwxyz012345"));
+                SCAddress{}, makeSymbol("abcdefghijklmnopqrstuvwxyz012345"),
+                ContractDataDurability::PERSISTENT, DATA_ENTRY);
             auto tx = sorobanTransactionFrameFromOps(app->getNetworkID(), root,
                                                      {op}, {}, resources,
                                                      3'500'000, 100'000);
@@ -2700,7 +2709,8 @@ TEST_CASE("soroban transaction validation", "[tx][envelope][soroban]")
         {
             resources.footprint.readOnly.resize(1);
             resources.footprint.readOnly.back() = contractDataKey(
-                Hash{}, makeSymbol("abcdefghijklmnopqrstuvwxyz012345"));
+                SCAddress{}, makeSymbol("abcdefghijklmnopqrstuvwxyz012345"),
+                ContractDataDurability::PERSISTENT, DATA_ENTRY);
             refConfig.maxContractDataKeySizeBytes() = 64;
             app->getLedgerManager().setSorobanNetworkConfig(refConfig);
             auto tx = sorobanTransactionFrameFromOps(app->getNetworkID(), root,
@@ -2713,7 +2723,8 @@ TEST_CASE("soroban transaction validation", "[tx][envelope][soroban]")
         {
             resources.footprint.readWrite.resize(1);
             resources.footprint.readWrite.back() = contractDataKey(
-                Hash{}, makeSymbol("abcdefghijklmnopqrstuvwxyz012345"));
+                SCAddress{}, makeSymbol("abcdefghijklmnopqrstuvwxyz012345"),
+                ContractDataDurability::PERSISTENT, DATA_ENTRY);
             refConfig.maxContractDataKeySizeBytes() = 64;
             app->getLedgerManager().setSorobanNetworkConfig(refConfig);
             auto tx = sorobanTransactionFrameFromOps(app->getNetworkID(), root,

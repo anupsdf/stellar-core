@@ -139,6 +139,13 @@ TransactionFrame::setReturnValue(SCVal&& returnValue)
     mReturnValue = returnValue;
 }
 
+void
+TransactionFrame::pushInitialExpirations(
+    UnorderedMap<LedgerKey, uint32_t>&& originalExpirations)
+{
+    mOriginalExpirations = originalExpirations;
+}
+
 #endif
 
 TransactionEnvelope const&
@@ -184,6 +191,26 @@ TransactionFrame::getNumOperations() const
     return mEnvelope.type() == ENVELOPE_TYPE_TX_V0
                ? static_cast<uint32_t>(mEnvelope.v0().tx.operations.size())
                : static_cast<uint32_t>(mEnvelope.v1().tx.operations.size());
+}
+
+Resource
+TransactionFrame::getResources() const
+{
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    if (isSoroban())
+    {
+        auto r = sorobanResources();
+        int64_t txSize = xdr::xdr_size(mEnvelope.v1().tx);
+        int64_t const opCount = 1;
+
+        return Resource({opCount, r.instructions, txSize, r.readBytes,
+                         r.writeBytes,
+                         static_cast<int64_t>(r.footprint.readOnly.size()),
+                         static_cast<int64_t>(r.footprint.readWrite.size())});
+    }
+#endif
+
+    return Resource(getNumOperations());
 }
 
 std::vector<Operation> const&
@@ -333,7 +360,8 @@ TransactionFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
         // this is buggy caching that existed in old versions of the protocol
         if (res)
         {
-            auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()));
+            auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()),
+                                               /*loadExpiredEntry=*/false);
             mCachedAccount = newest;
         }
         else
@@ -366,7 +394,8 @@ TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
             res = ltx.create(*mCachedAccount);
         }
 
-        auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()));
+        auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()),
+                                           /*loadExpiredEntry=*/false);
         mCachedAccount = newest;
         return res;
     }
@@ -657,7 +686,7 @@ TransactionFrame::computeSorobanResourceFee(
     cxxResources.write_bytes = txResources.writeBytes;
 
     cxxResources.transaction_size_bytes =
-        static_cast<uint32>(xdr::xdr_size(mEnvelope.v1().tx));
+        static_cast<uint32>(xdr::xdr_size(mEnvelope));
 
     cxxResources.metadata_size_bytes = txResources.extendedMetaDataSizeBytes;
 
@@ -899,19 +928,41 @@ TransactionFrame::commonValidPreSeqNum(Application& app, AbstractLedgerTxn& ltx,
             getResult().result.code(txSOROBAN_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
+
+        auto const& sorobanData = mEnvelope.v1().tx.ext.sorobanData();
         // Full fee has to be greater than the resource fee or
         // tx-specified refundable fee.
         if (getFullFee() < mSorobanResourceFee->fee ||
-            getFullFee() < mEnvelope.v1().tx.ext.sorobanData().refundableFee)
+            getFullFee() < sorobanData.refundableFee)
         {
             getResult().result.code(txINSUFFICIENT_FEE);
             return false;
         }
         // Refundable fee shouldn't exceed tx-specified refundable fee.
-        if (mEnvelope.v1().tx.ext.sorobanData().refundableFee <
-            mSorobanResourceFee->refundable_fee)
+        if (sorobanData.refundableFee < mSorobanResourceFee->refundable_fee)
         {
             getResult().result.code(txINSUFFICIENT_FEE);
+            return false;
+        }
+
+        // check for duplicates
+        UnorderedSet<LedgerKey> set;
+        auto checkDuplicates =
+            [&](xdr::xvector<stellar::LedgerKey> const& keys) -> bool {
+            for (auto const& lk : keys)
+            {
+                if (!set.emplace(lk).second)
+                {
+                    getResult().result.code(txMALFORMED);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if (!checkDuplicates(sorobanData.resources.footprint.readOnly) ||
+            !checkDuplicates(sorobanData.resources.footprint.readWrite))
+        {
             return false;
         }
     }
@@ -1326,16 +1377,18 @@ TransactionFrame::markResultFailed()
 }
 
 bool
-TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx)
+TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
+                        Hash const& sorobanBasePrngSeed)
 {
     TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
-    return apply(app, ltx, tm);
+    return apply(app, ltx, tm, sorobanBasePrngSeed);
 }
 
 bool
 TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                   Application& app, AbstractLedgerTxn& ltx,
-                                  TransactionMetaFrame& outerMeta)
+                                  TransactionMetaFrame& outerMeta,
+                                  Hash const& sorobanBasePrngSeed)
 {
     ZoneScoped;
     auto& internalErrorCounter = app.getMetrics().NewCounter(
@@ -1360,11 +1413,24 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
         auto& opTimer =
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
+        uint64_t opNum{0};
         for (auto& op : mOperations)
         {
             auto time = opTimer.TimeScope();
             LedgerTxn ltxOp(ltxTx);
-            bool txRes = op->apply(app, signatureChecker, ltxOp);
+
+            Hash subSeed = sorobanBasePrngSeed;
+            // If op can use the seed, we need to compute a sub-seed for it.
+            if (op->isSoroban())
+            {
+                SHA256 subSeedSha;
+                subSeedSha.add(sorobanBasePrngSeed);
+                subSeedSha.add(xdr::xdr_to_opaque(opNum));
+                subSeed = subSeedSha.finish();
+            }
+            ++opNum;
+
+            bool txRes = op->apply(app, signatureChecker, ltxOp, subSeed);
 
             if (!txRes)
             {
@@ -1387,6 +1453,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 ltxOp.commit();
             }
         }
+
+        success = success && applyExpirationBumps(app, ltxTx);
 
         if (success)
         {
@@ -1511,9 +1579,184 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
     return false;
 }
 
+// This function is responsible for auto expiration bumps, enforcing expiration
+// bounds, and charging expiration related fees. After InvokeHostFunctionOp is
+// applied, the host should have set LedgerEnry expirations as follows:
+//
+// If an entry was created with no manual expiration extension:
+//      entry.expirationLedgerSeq == LastClosedLedgerSeq
+//
+// If an entry was manually bumped:
+//      entry.expirationLedgerSeq == specifiedExpiration
+//
+// Where specifiedExpiration is the expiration extension from the manual bump.
+// Note that this is a contract provided expiration so it may be outside the
+// allowed expiration bounds and may need modification. The host should not
+// apply any auto bumps.
+//
+// Once we reach this, the smart contract function has succeeded. To avoid
+// burning fees unnecessarily, we should only fail the tx if refundableFee is
+// not large enough to pay for the required expiration extensions. If a user
+// specifies a expiration extension outside the bounds, the expiration will be
+// set to the bound and charged accordingly. So long as refundableFee is large
+// enough to cover the adjusted expirations, the tx still succeeds.
+bool
+TransactionFrame::applyExpirationBumps(Application& app, AbstractLedgerTxn& ltx)
+{
+    if (!isSoroban())
+    {
+        return true;
+    }
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    LedgerTxn ltxTx(ltx);
+    auto const& resources = sorobanResources();
+    auto ledgerSeq = ltxTx.loadHeader().current().ledgerSeq;
+    auto const& expirationSettings = app.getLedgerManager()
+                                         .getSorobanNetworkConfig(ltxTx)
+                                         .stateExpirationSettings();
+
+    auto maxExpirationLedger =
+        ledgerSeq + expirationSettings.maxEntryExpiration;
+    auto minRestorableExpirationLedger =
+        ledgerSeq + expirationSettings.minPersistentEntryExpiration;
+    auto minTempExpirationLedger =
+        ledgerSeq + expirationSettings.minTempEntryExpiration;
+    auto autoBumpLedgers = expirationSettings.autoBumpLedgers;
+
+    // Applies the correct expiration to LE. If expiration has not changed from
+    // pre-tx apply value, returns false. Otherwise, returns true
+    auto bump = [&](LedgerEntry& le, bool autoBump, bool enforceMinimum) {
+        // If an entry is being created for the first time, there is no original
+        // expiration, so set it to lcl for fee calculation purposes
+        auto iter = mOriginalExpirations.find(LedgerEntryKey(le));
+        uint32_t preApplyExpiration =
+            iter == mOriginalExpirations.end() ? ledgerSeq : iter->second;
+        uint32_t postApplyExpiration = getExpirationLedger(le);
+        uint32_t minimumForEntry = preApplyExpiration;
+
+        // First, calculate minimum expiration that should be applied. This
+        // value is (preApplyExpiration + autobump) or minExpirationForType,
+        // whichever is greater.
+        if (autoBump)
+        {
+            // Note: preApplyExpiration is guarenteed to be a valid expiration
+            // ledger so this can't overflow
+            minimumForEntry = preApplyExpiration + autoBumpLedgers;
+        }
+
+        if (enforceMinimum)
+        {
+            if (isTemporaryEntry(le.data))
+            {
+                minimumForEntry =
+                    std::max(minimumForEntry, minTempExpirationLedger);
+            }
+            else
+            {
+                minimumForEntry =
+                    std::max(minimumForEntry, minRestorableExpirationLedger);
+            }
+        }
+
+        // Check if the expiration bump applied by the host is enough to cover
+        // the required minimum
+        uint32_t expirationToApply = postApplyExpiration < minimumForEntry
+                                         ? minimumForEntry
+                                         : postApplyExpiration;
+
+        // Cap at max expiration
+        expirationToApply = std::min(expirationToApply, maxExpirationLedger);
+
+        if (expirationToApply == preApplyExpiration)
+        {
+            return false;
+        }
+        else
+        {
+            setExpirationLedger(le, expirationToApply);
+            return true;
+        }
+    };
+
+    for (auto const& key : resources.footprint.readWrite)
+    {
+        auto lte = ltxTx.load(key);
+        if (lte && isSorobanDataEntry(lte.current().data))
+        {
+            // Must enforce minimum expirations on write
+            bump(lte.current(),
+                 autoBumpLedgers > 0 && autoBumpEnabled(lte.current()), true);
+        }
+    }
+
+    bool isBumpOp = mOperations.front()->getOperation().body.type() ==
+                    BUMP_FOOTPRINT_EXPIRATION;
+    // TODO: Write expiration extension entries instead of witing whole entry
+    for (auto const& key : resources.footprint.readOnly)
+    {
+        // We don't need to enforce minimum on reads so this is just for
+        // autobump
+        if (autoBumpLedgers > 0)
+        {
+            auto lte = ltxTx.load(key);
+            if (lte && isSorobanDataEntry(lte.current().data))
+            {
+                bump(lte.current(), autoBumpEnabled(lte.current()) && !isBumpOp,
+                     false);
+            }
+        }
+    }
+
+    // WIP
+
+    // for (auto const& key : resources.footprint.readOnly)
+    // {
+    //     // Load without record to avoid rewriting full DATA_ENTRY. Instead,
+    //     // create a EXPIRATION_EXTENSION entry
+    //     auto lte = ltxTx.loadWithoutRecord(key);
+    //     if (lte && isSorobanDataEntry(lte.current().data))
+    //     {
+    //         auto extK = key;
+    //         setLeType(extK, EXPIRATION_EXTENSION);
+
+    //         // If a EXPIRATION_EXTENSION for the given entry already exists,
+    //         load
+    //         // it
+    //         auto extLte = ltxTx.load(extK);
+    //         if (extLte)
+    //         {
+    //             // Extension may be out of date so set the expiration
+    //             auto& extLe = extLte.current();
+    //             setExpirationLedger(extLe,
+    //             getExpirationLedger(lte.current()));
+
+    //             // Don't enforce minimums on reads
+    //             bump(extLe, autoBumpEnabled(lte.current()), false);
+    //         }
+    //         else
+    //         {
+    //             auto extLe = expirationExtensionFromDataEntry(lte.current());
+
+    //             // Don't enforce minimums on reads
+    //             if (bump(extLe, autoBumpEnabled(lte.current()), false))
+    //             {
+    //                 ltxTx.create(InternalLedgerEntry(extLe));
+    //             }
+    //         }
+    //     }
+    // }
+
+    ltxTx.commit();
+#endif
+
+    return true;
+}
+
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionMetaFrame& meta, bool chargeFee)
+                        TransactionMetaFrame& meta, bool chargeFee,
+                        Hash const& sorobanBasePrngSeed)
 {
     ZoneScoped;
     try
@@ -1547,7 +1790,8 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
             // have the correct TransactionResult so we must crash.
             if (ok)
             {
-                ok = applyOperations(signatureChecker, app, ltx, meta);
+                ok = applyOperations(signatureChecker, app, ltx, meta,
+                                     sorobanBasePrngSeed);
             }
             return ok;
         }
@@ -1576,9 +1820,10 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionMetaFrame& meta)
+                        TransactionMetaFrame& meta,
+                        Hash const& sorobanBasePrngSeed)
 {
-    return apply(app, ltx, meta, true);
+    return apply(app, ltx, meta, true, sorobanBasePrngSeed);
 }
 
 void

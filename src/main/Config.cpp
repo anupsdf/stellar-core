@@ -167,7 +167,12 @@ Config::Config() : NODE_SEED(SecretKey::random())
     USE_CONFIG_FOR_GENESIS = false;
     FAILURE_SAFETY = -1;
     UNSAFE_QUORUM = false;
-    LIMIT_TX_QUEUE_SOURCE_ACCOUNT = false;
+    LIMIT_TX_QUEUE_SOURCE_ACCOUNT =
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        true;
+#else
+        false;
+#endif
     DISABLE_BUCKET_GC = false;
     DISABLE_XDR_FSYNC = false;
     MAX_SLOTS_TO_REMEMBER = 12;
@@ -193,6 +198,19 @@ Config::Config() : NODE_SEED(SecretKey::random())
     TESTING_UPGRADE_RESERVE = LedgerManager::GENESIS_LEDGER_BASE_RESERVE;
     TESTING_UPGRADE_MAX_TX_SET_SIZE = 50;
     TESTING_UPGRADE_FLAGS = 0;
+    TESTING_LEDGER_MAX_PROPAGATE_SIZE_BYTES =
+        1 * InitialSorobanNetworkConfig::TX_MAX_SIZE_BYTES;
+    TESTING_LEDGER_MAX_INSTRUCTIONS =
+        1 * InitialSorobanNetworkConfig::TX_MAX_INSTRUCTIONS;
+    TESTING_LEDGER_MAX_READ_LEDGER_ENTRIES =
+        1 * InitialSorobanNetworkConfig::TX_MAX_READ_LEDGER_ENTRIES;
+    TESTING_LEDGER_MAX_READ_BYTES =
+        1 * InitialSorobanNetworkConfig::TX_MAX_READ_BYTES;
+    TESTING_LEDGER_MAX_WRITE_LEDGER_ENTRIES =
+        1 * InitialSorobanNetworkConfig::TX_MAX_WRITE_LEDGER_ENTRIES;
+    TESTING_LEDGER_MAX_WRITE_BYTES =
+        1 * InitialSorobanNetworkConfig::TX_MAX_WRITE_BYTES;
+    TESTING_LEDGER_MAX_SOROBAN_TX_COUNT = 1;
 
     HTTP_PORT = DEFAULT_PEER_PORT + 1;
     PUBLIC_HTTP_PORT = false;
@@ -209,6 +227,10 @@ Config::Config() : NODE_SEED(SecretKey::random())
 
     FLOOD_OP_RATE_PER_LEDGER = 1.0;
     FLOOD_TX_PERIOD_MS = 200;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    FLOOD_SOROBAN_RATE_PER_LEDGER = 1.0;
+    FLOOD_SOROBAN_TX_PERIOD_MS = 200;
+#endif
     FLOOD_ARB_TX_BASE_ALLOWANCE = 5;
     FLOOD_ARB_TX_DAMPING_FACTOR = 0.8;
 
@@ -1203,6 +1225,21 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
             {
                 FLOOD_TX_PERIOD_MS = readInt<int>(item, 1);
             }
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+            else if (item.first == "FLOOD_SOROBAN_RATE_PER_LEDGER")
+            {
+                FLOOD_SOROBAN_RATE_PER_LEDGER = readDouble(item);
+                if (FLOOD_SOROBAN_RATE_PER_LEDGER <= 0.0)
+                {
+                    throw std::invalid_argument(
+                        "bad value for FLOOD_SOROBAN_RATE_PER_LEDGER");
+                }
+            }
+            else if (item.first == "FLOOD_SOROBAN_TX_PERIOD_MS")
+            {
+                FLOOD_SOROBAN_TX_PERIOD_MS = readInt<int>(item, 1);
+            }
+#endif
             else if (item.first == "FLOOD_DEMAND_PERIOD_MS")
             {
                 FLOOD_DEMAND_PERIOD_MS =
@@ -1466,6 +1503,17 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
             throw std::runtime_error(msg);
         }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        if (!LIMIT_TX_QUEUE_SOURCE_ACCOUNT)
+        {
+            std::string msg =
+                "Invalid configuration: disabling "
+                "LIMIT_TX_QUEUE_SOURCE_ACCOUNT is not allowed. Starting core "
+                "with LIMIT_TX_QUEUE_SOURCE_ACCOUNT=true";
+            LOG_WARNING(DEFAULT_LOG, "{}", msg);
+            LIMIT_TX_QUEUE_SOURCE_ACCOUNT = true;
+        }
+#endif
         // PEER_FLOOD_READING_CAPACITY_BYTES (C): This is the initial credit
         // given to the sender. It is the maximum number of bytes that the
         // sender can transmit to the receiver before it needs to wait for

@@ -5,6 +5,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ledger/LedgerTxn.h"
+#include "main/Config.h"
 #include <cstdint>
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 #include "rust/RustBridge.h"
@@ -29,21 +30,23 @@ struct InitialSorobanNetworkConfig
         64 * 1024; // 64KB
 
     // Compute settings
-    static constexpr int64_t LEDGER_MAX_INSTRUCTIONS = 1;
-    static constexpr int64_t TX_MAX_INSTRUCTIONS = 40'000'000;
+    static constexpr int64_t TX_MAX_INSTRUCTIONS = 100'000'000;
+    static constexpr int64_t LEDGER_MAX_INSTRUCTIONS = 10 * TX_MAX_INSTRUCTIONS;
     static constexpr int64_t FEE_RATE_PER_INSTRUCTIONS_INCREMENT =
-        100;                                                   // 0.2 XLM/max tx
-    static constexpr uint32_t MEMORY_LIMIT = 50 * 1024 * 1024; // 50MB
+        100; // 0.2 XLM/max tx
+    static constexpr uint32_t MEMORY_LIMIT = 100 * 1024 * 1024; // 100MB
 
     // Ledger access settings
-    static constexpr uint32_t LEDGER_MAX_READ_LEDGER_ENTRIES = 1;
-    static constexpr uint32_t LEDGER_MAX_READ_BYTES = 1;
-    static constexpr uint32_t LEDGER_MAX_WRITE_LEDGER_ENTRIES = 1;
-    static constexpr uint32_t LEDGER_MAX_WRITE_BYTES = 1;
     static constexpr uint32_t TX_MAX_READ_LEDGER_ENTRIES = 40;
     static constexpr uint32_t TX_MAX_READ_BYTES = 200 * 1024;
     static constexpr uint32_t TX_MAX_WRITE_LEDGER_ENTRIES = 20;
     static constexpr uint32_t TX_MAX_WRITE_BYTES = 100 * 1024;
+    static constexpr uint32_t LEDGER_MAX_READ_LEDGER_ENTRIES =
+        10 * TX_MAX_READ_LEDGER_ENTRIES;
+    static constexpr uint32_t LEDGER_MAX_READ_BYTES = 10 * TX_MAX_READ_BYTES;
+    static constexpr uint32_t LEDGER_MAX_WRITE_LEDGER_ENTRIES =
+        10 * TX_MAX_WRITE_LEDGER_ENTRIES;
+    static constexpr uint32_t LEDGER_MAX_WRITE_BYTES = 10 * TX_MAX_WRITE_BYTES;
     static constexpr int64_t FEE_READ_LEDGER_ENTRY = 5'000;   // 0.02 XLM/max tx
     static constexpr int64_t FEE_WRITE_LEDGER_ENTRY = 20'000; // 0.04 XLM/max tx
     static constexpr int64_t FEE_READ_1KB = 1'000;            // 0.02 XLM/max tx
@@ -57,13 +60,27 @@ struct InitialSorobanNetworkConfig
     static constexpr int64_t FEE_HISTORICAL_1KB = 100; // 0.001 XLM/max tx
 
     // Bandwidth settings
-    static constexpr uint32_t LEDGER_MAX_PROPAGATE_SIZE_BYTES = 1;
     static constexpr uint32_t TX_MAX_SIZE_BYTES = 100 * 1024;
+    static constexpr uint32_t LEDGER_MAX_PROPAGATE_SIZE_BYTES =
+        10 * TX_MAX_SIZE_BYTES;
     static constexpr int64_t FEE_PROPAGATE_DATA_1KB = 2'000; // 0.02 XLM/max tx
 
     // Meta data settings
     static constexpr uint32_t TX_MAX_EXTENDED_META_DATA_SIZE_BYTES = 500 * 1024;
     static constexpr int64_t FEE_EXTENDED_META_DATA_1KB = 200;
+
+    // State expiration settings
+    // 1 year in ledgers
+    static constexpr uint32_t MAXIMUM_ENTRY_LIFETIME = 6'312'000;
+
+    // Live until level 6
+    static constexpr uint32_t MINIMUM_PERSISTENT_ENTRY_LIFETIME = 4096;
+    static constexpr uint32_t MINIMUM_TEMP_ENTRY_LIFETIME = 16;
+
+    static constexpr uint32_t AUTO_BUMP_NUM_LEDGERS = 0;
+
+    // General execution settings
+    static constexpr uint32_t LEDGER_MAX_TX_COUNT = 10;
 };
 
 // Wrapper for the contract-related network configuration.
@@ -73,13 +90,15 @@ class SorobanNetworkConfig
     // Creates the initial contract configuration entries for protocol v20.
     // This should happen once during the correspondent protocol version
     // upgrade.
-    static void createLedgerEntriesForV20(AbstractLedgerTxn& ltx);
+    static void createLedgerEntriesForV20(AbstractLedgerTxn& ltx,
+                                          Config const& cfg);
     // Test-only function that initializes contract network configuration
     // bypassing the normal upgrade process (i.e. when genesis ledger starts not
     // at v1)
     static void
     initializeGenesisLedgerForTesting(uint32_t genesisLedgerProtocol,
-                                      AbstractLedgerTxn& ltx);
+                                      AbstractLedgerTxn& ltx,
+                                      Config const& cfg);
 
     void loadFromLedger(AbstractLedgerTxn& ltx);
     // Maximum allowed size of the contract Wasm that can be uploaded (in
@@ -153,6 +172,9 @@ class SorobanNetworkConfig
     // Fee for propagating 1KB of data
     int64_t feePropagateData1KB() const;
 
+    // General execution ledger settings
+    uint32_t ledgerMaxTxCount() const;
+
 #ifdef BUILD_TESTS
     uint32_t& maxContractDataKeySizeBytes();
     uint32_t& maxContractDataEntrySizeBytes();
@@ -166,6 +188,12 @@ class SorobanNetworkConfig
     static bool isValidCostParams(ContractCostParams const& params);
 
     CxxFeeConfiguration rustBridgeFeeConfiguration() const;
+
+    // State expiration settings
+    StateExpirationSettings const& stateExpirationSettings() const;
+#ifdef BUILD_TESTS
+    StateExpirationSettings& stateExpirationSettings();
+#endif
 #endif
 
   private:
@@ -179,6 +207,8 @@ class SorobanNetworkConfig
     void loadBandwidthSettings(AbstractLedgerTxn& ltx);
     void loadCpuCostParams(AbstractLedgerTxn& ltx);
     void loadMemCostParams(AbstractLedgerTxn& ltx);
+    void loadStateExpirationSettings(AbstractLedgerTxn& ltx);
+    void loadExecutionLanesSettings(AbstractLedgerTxn& ltx);
 
     uint32_t mMaxContractSizeBytes{};
     uint32_t mMaxContractDataKeySizeBytes{};
@@ -195,6 +225,7 @@ class SorobanNetworkConfig
     uint32_t mLedgerMaxReadBytes{};
     uint32_t mLedgerMaxWriteLedgerEntries{};
     uint32_t mLedgerMaxWriteBytes{};
+    uint32_t mLedgerMaxTxCount{};
     uint32_t mTxMaxReadLedgerEntries{};
     uint32_t mTxMaxReadBytes{};
     uint32_t mTxMaxWriteLedgerEntries{};
@@ -224,6 +255,10 @@ class SorobanNetworkConfig
     // Host cost params
     ContractCostParams mCpuCostParams{};
     ContractCostParams mMemCostParams{};
+
+    // State expiration settings
+    StateExpirationSettings mStateExpirationSettings{};
+
 #endif
 };
 

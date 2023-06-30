@@ -282,19 +282,24 @@ configSettingKey(ConfigSettingID const& configSettingID)
 }
 
 LedgerKey
-contractDataKey(Hash const& contractID, SCVal const& dataKey)
+contractDataKey(SCAddress const& contract, SCVal const& dataKey,
+                ContractDataDurability durability,
+                ContractEntryBodyType bodyType)
 {
     LedgerKey key(CONTRACT_DATA);
-    key.contractData().contractID = contractID;
+    key.contractData().contract = contract;
     key.contractData().key = dataKey;
+    key.contractData().durability = durability;
+    key.contractData().bodyType = bodyType;
     return key;
 }
 
 LedgerKey
-contractCodeKey(Hash const& hash)
+contractCodeKey(Hash const& hash, ContractEntryBodyType bodyType)
 {
     LedgerKey key(CONTRACT_CODE);
     key.contractCode().hash = hash;
+    key.contractCode().bodyType = bodyType;
     return key;
 }
 #endif
@@ -328,7 +333,8 @@ ConstLedgerTxnEntry
 loadAccountWithoutRecord(AbstractLedgerTxn& ltx, AccountID const& accountID)
 {
     ZoneScoped;
-    return ltx.loadWithoutRecord(accountKey(accountID));
+    return ltx.loadWithoutRecord(accountKey(accountID),
+                                 /*loadExpiredEntry=*/false);
 }
 
 LedgerTxnEntry
@@ -429,18 +435,18 @@ loadLiquidityPool(AbstractLedgerTxn& ltx, PoolID const& poolID)
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 LedgerTxnEntry
-loadContractData(AbstractLedgerTxn& ltx, Hash const& contractID,
-                 SCVal const& dataKey)
+loadContractData(AbstractLedgerTxn& ltx, SCAddress const& contract,
+                 SCVal const& dataKey, ContractDataDurability type)
 {
     ZoneScoped;
-    return ltx.load(contractDataKey(contractID, dataKey));
+    return ltx.load(contractDataKey(contract, dataKey, type, DATA_ENTRY));
 }
 
 LedgerTxnEntry
 loadContractCode(AbstractLedgerTxn& ltx, Hash const& hash)
 {
     ZoneScoped;
-    return ltx.load(contractCodeKey(hash));
+    return ltx.load(contractCodeKey(hash, DATA_ENTRY));
 }
 #endif
 
@@ -1398,8 +1404,10 @@ prefetchForRevokeFromPoolShareTrustLines(
     {
         // prefetching shouldn't affect the protocol, so use loadWithoutRecord
         // to not touch lastModified
-        auto pool = ltx.loadWithoutRecord(liquidityPoolKey(
-            trustLine.current().data.trustLine().asset.liquidityPoolID()));
+        auto pool = ltx.loadWithoutRecord(
+            liquidityPoolKey(
+                trustLine.current().data.trustLine().asset.liquidityPoolID()),
+            /*loadExpiredEntry=*/false);
 
         auto const& params =
             pool.current().data.liquidityPool().body.constantProduct().params;

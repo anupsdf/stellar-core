@@ -438,6 +438,14 @@ class Config : public std::enable_shared_from_this<Config>
     uint32_t TESTING_UPGRADE_RESERVE;     // in stroops
     uint32_t TESTING_UPGRADE_MAX_TX_SET_SIZE;
     uint32_t TESTING_UPGRADE_FLAGS;
+    uint32_t TESTING_LEDGER_MAX_PROPAGATE_SIZE_BYTES;
+    int64_t TESTING_LEDGER_MAX_INSTRUCTIONS;
+    uint32_t TESTING_LEDGER_MAX_READ_LEDGER_ENTRIES;
+    uint32_t TESTING_LEDGER_MAX_READ_BYTES;
+    uint32_t TESTING_LEDGER_MAX_WRITE_LEDGER_ENTRIES;
+    uint32_t TESTING_LEDGER_MAX_WRITE_BYTES;
+    uint32_t TESTING_LEDGER_MAX_SOROBAN_TX_COUNT;
+
     unsigned short HTTP_PORT; // what port to listen for commands
     bool PUBLIC_HTTP_PORT;    // if you accept commands from not localhost
     int HTTP_MAX_CLIENT;      // maximum number of http clients, i.e backlog
@@ -457,6 +465,10 @@ class Config : public std::enable_shared_from_this<Config>
     int MAX_BATCH_WRITE_BYTES;
     double FLOOD_OP_RATE_PER_LEDGER;
     int FLOOD_TX_PERIOD_MS;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    double FLOOD_SOROBAN_RATE_PER_LEDGER;
+    int FLOOD_SOROBAN_TX_PERIOD_MS;
+#endif
     int32_t FLOOD_ARB_TX_BASE_ALLOWANCE;
     double FLOOD_ARB_TX_DAMPING_FACTOR;
 

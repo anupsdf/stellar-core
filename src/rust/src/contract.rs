@@ -5,12 +5,11 @@
 use crate::{
     log::partition::TX,
     rust_bridge::{
-        CxxBuf, CxxFeeConfiguration, CxxLedgerInfo, CxxTransactionResources, FeePair,
+        Bump, CxxBuf, CxxFeeConfiguration, CxxLedgerInfo, CxxTransactionResources, FeePair,
         InvokeHostFunctionOutput, RustBuf, XDRFileHash,
     },
 };
 use log::debug;
-use soroban_env_host_curr::xdr::{ContractCostParams, ContractEventType, ScErrorCode, ScErrorType, SorobanAuthorizationEntry};
 use std::{fmt::Display, io::Cursor, panic, rc::Rc};
 
 // This module (contract) is bound to _two separate locations_ in the module
@@ -20,15 +19,18 @@ use std::{fmt::Display, io::Cursor, panic, rc::Rc};
 use super::soroban_env_host::{
     budget::Budget,
     events::Events,
+    expiration_ledger_bumps::ExpirationLedgerBumps,
     fees::{
         compute_transaction_resource_fee as host_compute_transaction_resource_fee,
         FeeConfiguration, TransactionResources,
     },
     storage::{self, AccessType, Footprint, FootprintMap, Storage, StorageMap},
     xdr::{
-        self, AccountId, ContractEvent, DiagnosticEvent, HostFunction, LedgerEntry,
-        LedgerEntryData, LedgerKey, LedgerKeyAccount, LedgerKeyContractCode, LedgerKeyContractData,
-        LedgerKeyTrustLine, ReadXdr, SorobanResources, WriteXdr, XDR_FILES_SHA256,
+        self, AccountId, ContractCodeEntryBody, ContractCostParams, ContractDataEntryBody,
+        ContractEvent, ContractEventType, ContractEntryBodyType, DiagnosticEvent, HostFunction,
+        LedgerEntry, LedgerEntryData, LedgerKey, LedgerKeyAccount, LedgerKeyContractCode,
+        LedgerKeyContractData, LedgerKeyTrustLine, ReadXdr, ScErrorCode, ScErrorType,
+        SorobanAuthorizationEntry, SorobanResources, WriteXdr, XDR_FILES_SHA256,
     },
     DiagnosticLevel, Host, HostError, LedgerInfo,
 };
@@ -42,6 +44,9 @@ impl From<CxxLedgerInfo> for LedgerInfo {
             timestamp: c.timestamp,
             network_id: c.network_id.try_into().unwrap(),
             base_reserve: c.base_reserve,
+            min_temp_entry_expiration: c.min_temp_entry_expiration,
+            min_persistent_entry_expiration: c.min_persistent_entry_expiration,
+            max_entry_expiration: c.max_entry_expiration
         }
     }
 }
@@ -180,7 +185,7 @@ fn build_storage_footprint_from_xdr(
         read_only,
         read_write,
     } = footprint;
-    let mut access = FootprintMap::new()?;
+    let mut access = FootprintMap::new();
 
     populate_access_map(
         &mut access,
@@ -207,11 +212,24 @@ fn ledger_entry_to_ledger_key(le: &LedgerEntry) -> Result<LedgerKey, CoreHostErr
             asset: tl.asset.clone(),
         })),
         LedgerEntryData::ContractData(cd) => Ok(LedgerKey::ContractData(LedgerKeyContractData {
-            contract_id: cd.contract_id.clone(),
+            contract: cd.contract.clone(),
             key: cd.key.clone(),
+            durability: cd.durability.clone(),
+            body_type: match &cd.body {
+                ContractDataEntryBody::DataEntry(_data) => ContractEntryBodyType::DataEntry,
+                ContractDataEntryBody::ExpirationExtension => {
+                    ContractEntryBodyType::ExpirationExtension
+                }
+            },
         })),
         LedgerEntryData::ContractCode(code) => Ok(LedgerKey::ContractCode(LedgerKeyContractCode {
             hash: code.hash.clone(),
+            body_type: match &code.body {
+                ContractCodeEntryBody::DataEntry(_data) => ContractEntryBodyType::DataEntry,
+                ContractCodeEntryBody::ExpirationExtension => {
+                    ContractEntryBodyType::ExpirationExtension
+                }
+            },
         })),
         _ => Err(CoreHostError::General("unexpected ledger key")),
     }
@@ -226,7 +244,7 @@ fn build_storage_map_from_xdr_ledger_entries(
     footprint: &storage::Footprint,
     ledger_entries: &Vec<CxxBuf>,
 ) -> Result<StorageMap, CoreHostError> {
-    let mut map = StorageMap::new()?;
+    let mut map = StorageMap::new();
     for buf in ledger_entries {
         let le = Rc::new(xdr_from_cxx_buf::<LedgerEntry>(buf)?);
         let key = Rc::new(ledger_entry_to_ledger_key(&le)?);
@@ -314,6 +332,18 @@ fn log_debug_events(events: &Events) {
     }
 }
 
+fn extract_bumps(bumps: &ExpirationLedgerBumps) -> Result<Vec<Bump>, HostError> {
+    bumps
+        .iter()
+        .map(|e| {
+            Ok(Bump {
+                ledger_key: xdr_to_rust_buf(e.key.as_ref())?,
+                min_expiration: e.min_expiration,
+            })
+        })
+        .collect()
+}
+
 /// Deserializes an [`xdr::HostFunction`] host function XDR object an
 /// [`xdr::Footprint`] and a sequence of [`xdr::LedgerEntry`] entries containing all
 /// the data the invocation intends to read. Then calls the specified host function
@@ -328,6 +358,7 @@ pub(crate) fn invoke_host_function(
     auth_entries: &Vec<CxxBuf>,
     ledger_info: CxxLedgerInfo,
     ledger_entries: &Vec<CxxBuf>,
+    base_prng_seed: &CxxBuf,
 ) -> Result<InvokeHostFunctionOutput, Box<dyn Error>> {
     let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         invoke_host_function_or_maybe_panic(
@@ -338,6 +369,7 @@ pub(crate) fn invoke_host_function(
             auth_entries,
             ledger_info,
             ledger_entries,
+            base_prng_seed,
         )
     }));
     match res {
@@ -354,6 +386,7 @@ fn invoke_host_function_or_maybe_panic(
     auth_entries: &Vec<CxxBuf>,
     ledger_info: CxxLedgerInfo,
     ledger_entries: &Vec<CxxBuf>,
+    base_prng_seed: &CxxBuf,
 ) -> Result<InvokeHostFunctionOutput, Box<dyn Error>> {
     let hf = xdr_from_cxx_buf::<HostFunction>(&hf_buf)?;
     let source_account = xdr_from_cxx_buf::<AccountId>(&source_account_buf)?;
@@ -373,12 +406,18 @@ fn invoke_host_function_or_maybe_panic(
     host.set_source_account(source_account);
     host.set_ledger_info(ledger_info.into());
     host.set_authorization_entries(auth_entries)?;
+    let seed32: [u8; 32] = base_prng_seed
+        .data
+        .as_slice()
+        .try_into()
+        .map_err(|_| CoreHostError::General("Wrong base PRNG seed size"))?;
+    host.set_base_prng_seed(seed32);
     if enable_diagnostics {
         host.set_diagnostic_level(DiagnosticLevel::Debug);
     }
 
     let res = host.invoke_function(hf);
-    let (storage, budget, events) = host
+    let (storage, budget, events, bumps) = host
         .try_finish()
         .map_err(|_h| CoreHostError::General("could not finalize host"))?;
     log_debug_events(&events);
@@ -392,8 +431,9 @@ fn invoke_host_function_or_maybe_panic(
                 contract_events: vec![],
                 diagnostic_events: extract_diagnostic_events(&events)?,
                 modified_ledger_entries: vec![],
-                cpu_insns: budget.get_cpu_insns_count(),
-                mem_bytes: budget.get_mem_bytes_count(),
+                cpu_insns: budget.get_cpu_insns_consumed(),
+                mem_bytes: budget.get_mem_bytes_consumed(),
+                expiration_bumps: vec![],
             });
         }
     };
@@ -402,15 +442,17 @@ fn invoke_host_function_or_maybe_panic(
         build_xdr_ledger_entries_from_storage_map(&storage.footprint, &storage.map, &budget)?;
     let contract_events = extract_contract_events(&events)?;
     let diagnostic_events = extract_diagnostic_events(&events)?;
-    
+    let expiration_bumps = extract_bumps(&bumps)?;
+
     Ok(InvokeHostFunctionOutput {
         success: true,
         result_value,
         contract_events,
         diagnostic_events,
         modified_ledger_entries,
-        cpu_insns: budget.get_cpu_insns_count(),
-        mem_bytes: budget.get_mem_bytes_count(),
+        cpu_insns: budget.get_cpu_insns_consumed(),
+        mem_bytes: budget.get_mem_bytes_consumed(),
+        expiration_bumps,
     })
 }
 

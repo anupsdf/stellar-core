@@ -1,38 +1,30 @@
 #pragma once
 
-// Copyright 2022 Stellar Development Foundation and contributors. Licensed
+// Copyright 2023 Stellar Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "xdr/Stellar-transaction.h"
-#include <medida/metrics_registry.h>
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-#include "rust/RustBridge.h"
 #include "transactions/OperationFrame.h"
+#include "xdr/Stellar-transaction.h"
 
 namespace stellar
 {
 class AbstractLedgerTxn;
 
-static constexpr ContractDataDurability CONTRACT_INSTANCE_CONTRACT_DURABILITY =
-    ContractDataDurability::PERSISTENT;
-
-class InvokeHostFunctionOpFrame : public OperationFrame
+class RestoreFootprintOpFrame : public OperationFrame
 {
-    InvokeHostFunctionResult&
+    RestoreFootprintResult&
     innerResult()
     {
-        return mResult.tr().invokeHostFunctionResult();
+        return mResult.tr().restoreFootprintResult();
     }
 
-    void maybePopulateDiagnosticEvents(Config const& cfg,
-                                       InvokeHostFunctionOutput const& output);
-
-    InvokeHostFunctionOp const& mInvokeHostFunction;
+    RestoreFootprintOp const& mRestoreFootprintOp;
 
   public:
-    InvokeHostFunctionOpFrame(Operation const& op, OperationResult& res,
-                              TransactionFrame& parentTx);
+    RestoreFootprintOpFrame(Operation const& op, OperationResult& res,
+                            TransactionFrame& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;
 
@@ -47,10 +39,10 @@ class InvokeHostFunctionOpFrame : public OperationFrame
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;
 
-    static InvokeHostFunctionResultCode
+    static RestoreFootprintResultCode
     getInnerCode(OperationResult const& res)
     {
-        return res.tr().invokeHostFunctionResult().code();
+        return res.tr().restoreFootprintResult().code();
     }
 
     virtual bool isSoroban() const override;
