@@ -581,8 +581,8 @@ compareTxSets(TxSetFrameConstPtr l, TxSetFrameConstPtr r, Hash const& lh,
     if (protocolVersionStartsFrom(header.ledgerVersion,
                                   GENERALIZED_TX_SET_PROTOCOL_VERSION))
     {
-        auto lBids = l->getTotalBids();
-        auto rBids = r->getTotalBids();
+        auto lBids = l->getTotalInclusionFees();
+        auto rBids = r->getTotalInclusionFees();
         if (lBids != rBids)
         {
             return lBids < rBids;
@@ -673,6 +673,13 @@ HerderSCPDriver::combineCandidates(uint64_t slotIndex,
                     clUpgrade.newBaseReserve() = std::max(
                         clUpgrade.newBaseReserve(), lupgrade.newBaseReserve());
                     break;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+                case LEDGER_UPGRADE_MAX_SOROBAN_TX_SET_SIZE:
+                    clUpgrade.newMaxSorobanTxSetSize() =
+                        std::max(clUpgrade.newMaxSorobanTxSetSize(),
+                                 lupgrade.newMaxSorobanTxSetSize());
+                    break;
+#endif
                 default:
                     // should never get there with values that are not valid
                     throw std::runtime_error("invalid upgrade step");

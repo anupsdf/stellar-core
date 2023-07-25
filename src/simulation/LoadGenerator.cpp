@@ -226,7 +226,7 @@ LoadGenerator::scheduleLoadGeneration(GeneratedLoadConfig cfg)
     // source accounts
     if (!mStarted && cfg.mode != LoadGenMode::CREATE)
     {
-        for (auto i = 0; i < cfg.nAccounts; i++)
+        for (auto i = 0u; i < cfg.nAccounts; i++)
         {
             mAccountsAvailable.insert(i + cfg.offset);
         }
@@ -249,7 +249,7 @@ LoadGenerator::scheduleLoadGeneration(GeneratedLoadConfig cfg)
         CLOG_WARNING(
             LoadGen,
             "Application is not in sync, load generation inhibited. State {}",
-            mApp.getState());
+            mApp.getStateHuman());
         mLoadTimer->expires_from_now(std::chrono::seconds(10));
         mLoadTimer->async_wait(
             [this, cfg]() { this->scheduleLoadGeneration(cfg); },
@@ -541,7 +541,7 @@ LoadGenerator::submitTx(GeneratedLoadConfig const& cfg,
             // transaction.
             from->setSequenceNumber(from->getLastSequenceNumber() - 1);
             CLOG_INFO(LoadGen, "skipped low fee tx with fee {}",
-                      tx->getFeeBid());
+                      tx->getInclusionFee());
             return false;
         }
         if (++numTries >= TX_SUBMIT_MAX_TRIES ||

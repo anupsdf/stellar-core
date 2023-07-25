@@ -303,6 +303,18 @@ int64_t getPoolWithdrawalAmount(int64_t amountPoolShares,
 void maybeUpdateAccountOnLedgerSeqUpdate(LedgerTxnHeader const& header,
                                          LedgerTxnEntry& account);
 
-int64_t getMinFee(TransactionFrameBase const& tx, LedgerHeader const& header,
-                  std::optional<int64_t> baseFee = std::nullopt);
+// Get min _inclusion_ fee needed for this transaction to get included
+int64_t getMinInclusionFee(TransactionFrameBase const& tx,
+                           LedgerHeader const& header,
+                           std::optional<int64_t> baseFee = std::nullopt);
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+struct LumenContractInfo
+{
+    Hash mLumenContractID;
+    SCVal mBalanceSymbol;
+    SCVal mAmountSymbol;
+};
+LumenContractInfo getLumenContractInfo(std::string networkPassphrase);
+#endif
 }
