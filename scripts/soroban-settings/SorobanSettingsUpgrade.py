@@ -1,3 +1,6 @@
+import sys
+sys.path.append("/Users/anuppani/py-stellar-base")
+
 from stellar_sdk import xdr as stellar_xdr
 from stellar_sdk import Network, Keypair, TransactionBuilder, StrKey, utils
 from stellar_sdk.soroban import SorobanServer
@@ -9,7 +12,6 @@ from enum import IntEnum
 import urllib.parse
 import argparse
 import time
-import sys
 
 secret = "SAAPYAPTTRZMCUZFPG3G66V4ZMHTK4TWA6NS7U4F7Z3IMUD52EK4DDEV"
 # public -> GDAT5HWTGIU4TSSZ4752OUC4SABDLTLZFRPZUJ3D6LKBNEPA7V2CIG54
