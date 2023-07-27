@@ -1,5 +1,4 @@
 import sys
-sys.path.append("/Users/anuppani/py-stellar-base")
 
 from stellar_sdk import xdr as stellar_xdr
 from stellar_sdk import Network, Keypair, TransactionBuilder, StrKey, utils
@@ -13,18 +12,18 @@ import urllib.parse
 import argparse
 import time
 
-secret = "SAAPYAPTTRZMCUZFPG3G66V4ZMHTK4TWA6NS7U4F7Z3IMUD52EK4DDEV"
-# public -> GDAT5HWTGIU4TSSZ4752OUC4SABDLTLZFRPZUJ3D6LKBNEPA7V2CIG54
+secret = "SBYV3LL6ITZB53HEC3JNESL3NJE5ZT7YX4OXYLX7TEYCRFFC4I2XDBKW" 
+#    public -> GA45KWDQ3BQUSOLBI7NRISWJBEGT4COCCF6ZG27RO3PAYERUBTRFELTO
 
 # For standalone
 # Fund standalone with friendbot - http://localhost:8000/friendbot?addr=GDAT5HWTGIU4TSSZ4752OUC4SABDLTLZFRPZUJ3D6LKBNEPA7V2CIG54
-# rpc_server_url = "http://127.0.0.1:8000/soroban/rpc"
-# network_passphrase = Network.STANDALONE_NETWORK_PASSPHRASE
+rpc_server_url = "http://localhost:8000/soroban/rpc"
+network_passphrase = Network.STANDALONE_NETWORK_PASSPHRASE
 
 # For futurenet
 # Fund futurenet with friendbot - https://friendbot-futurenet.stellar.org/?addr=GDAT5HWTGIU4TSSZ4752OUC4SABDLTLZFRPZUJ3D6LKBNEPA7V2CIG54
-rpc_server_url = "https://rpc-futurenet.stellar.org:443/"
-network_passphrase = Network.FUTURENET_NETWORK_PASSPHRASE
+# rpc_server_url = "https://rpc-futurenet.stellar.org:443/"
+# network_passphrase = Network.FUTURENET_NETWORK_PASSPHRASE
 
 contract_file_path = "write_upgrade_bytes/target/wasm32-unknown-unknown/release/soroban_write_upgrade_bytes_contract.wasm"
 
@@ -37,7 +36,7 @@ def get_upgrade_set():
                                                  min_temp_entry_expiration=Uint32(
                                                      16),
                                                  min_persistent_entry_expiration=Uint32(
-                                                     86400),
+                                                     64),
                                                  auto_bump_ledgers=Uint32(0),
                                                  persistent_rent_rate_denominator=Int64(
                                                      0),
