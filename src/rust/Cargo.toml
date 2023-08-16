@@ -51,7 +51,7 @@ optional = true
 version = "0.0.17"
 git = "https://github.com/stellar/rs-soroban-env"
 package = "soroban-env-host"
-rev = "400d806387140553e4e685d232deb3a807ec0e36"
+rev = "34e2265f671f82fc3fab1239736373ae2d6b5cb1"
 
 [dependencies.soroban-test-wasms]
 git = "https://github.com/anupsdf/rs-soroban-env"
