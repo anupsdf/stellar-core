@@ -380,8 +380,7 @@ TransactionQueue::canAdd(
     auto ledgerVersion = mApp.getLedgerManager()
                              .getLastClosedLedgerHeader()
                              .header.ledgerVersion;
-    auto diagnosticEvents =
-        std::make_shared<DiagnosticEventBuffer>(mApp.getConfig());
+    auto diagnosticEvents = DiagnosticEventBuffer(mApp.getConfig());
 
     if (stateIter != mAccountStates.end())
     {
@@ -418,7 +417,7 @@ TransactionQueue::canAdd(
                         mApp.getAppConnector(),
                         mApp.getLedgerManager()
                             .getLastClosedSorobanNetworkConfig(),
-                        ledgerVersion, txResult, diagnosticEvents))
+                        ledgerVersion, txResult, &diagnosticEvents))
                 {
                     return AddResult(AddResultCode::ADD_STATUS_ERROR, txResult);
                 }
@@ -499,7 +498,7 @@ TransactionQueue::canAdd(
     {
         txResult = tx->checkValid(mApp.getAppConnector(), ls, 0, 0,
                                   getUpperBoundCloseTimeOffset(mApp, closeTime),
-                                  diagnosticEvents);
+                                  &diagnosticEvents);
     }
     if (!txResult->isSuccess())
     {
@@ -535,15 +534,14 @@ TransactionQueue::canAdd(
     {
         txResult->setInnermostResultCode(txSOROBAN_INVALID);
 
-        releaseAssertOrThrow(txResult->getSorobanData());
         pushValidationTimeDiagnosticError(
-            diagnosticEvents, SCE_CONTEXT, SCEC_INVALID_INPUT,
+            &diagnosticEvents, SCE_CONTEXT, SCEC_INVALID_INPUT,
             "non-source auth Soroban tx uses memo or muxed source account");
 
-        xdr::xvector<DiagnosticEvent> des;
-        diagnosticEvents->flush(des);
+        xdr::xvector<DiagnosticEvent> xdrDiagnosticEvents;
+        diagnosticEvents.flush(xdrDiagnosticEvents);
         return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
-                         txResult, std::move(des));
+                         txResult, std::move(xdrDiagnosticEvents));
     }
 
     return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_PENDING,
