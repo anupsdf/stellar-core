@@ -84,7 +84,6 @@ jobs:
           echo Build with $CC and $CXX
           ./ci-build.sh --use-temp-db --protocol ${{ matrix.protocol }} ${{ matrix.scenario }}
 
-name: cleanup caches by a branch
 on:
   pull_request:
     types:
