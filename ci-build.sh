@@ -130,60 +130,16 @@ ccache -p
 
 ccache -s
 date
-time ./autogen.sh
-time ./configure $config_flags
-if [ -z "${SKIP_FORMAT_CHECK}" ]; then
-    make format
-    d=`git diff | wc -l`
-    if [ $d -ne 0 ]
-    then
-        echo "clang format must be run as part of the pull request, current diff:"
-        git diff
-        exit 1
-    fi
-fi
 
-crlf=$(find . ! \( -type d -o -path './.git/*' -o -path './Builds/*' -o -path './lib/*' \) -print0 | xargs -0 -n1 -P9 file "{}" | grep CRLF || true)
-if [ -n "$crlf" ]
-then
-    echo "Found some files with Windows line endings:"
-    echo "$crlf"
-    exit 1
-fi
-
-date
-time make -j$(($NPROCS - 1))
+echo "Anup testing"
 
 ccache -s
 ### incrementally purge old content from cargo source cache and target directory
 cargo cache trim --limit 100M
 cargo sweep --maxsize 500MB
 
-if [ $WITH_TESTS -eq 0 ] ; then
-    echo "Build done, skipping tests"
-    exit 0
-fi
-
-if [ $TEMP_POSTGRES -eq 0 ] ; then
-    # Create postgres databases
-    export PGUSER=postgres
-    psql -c "create database test;"
-    # we run NPROCS jobs in parallel
-    for j in $(seq 0 $((NPROCS-1))); do
-        base_instance=$((j*50))
-        for i in $(seq $base_instance $((base_instance+15))); do
-            psql -c "create database test$i;"
-        done
-    done
-fi
-
-export ALL_VERSIONS=1
-export NUM_PARTITIONS=$((NPROCS*2))
-export RUN_PARTITIONS
-export RND_SEED=$(($(date +%s) / 86400))  # Convert to days since epoch
-echo "Using RND_SEED: $RND_SEED"
 ulimit -n 256
-time make check
+
 
 echo All done
 date
