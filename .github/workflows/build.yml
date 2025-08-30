@@ -10,7 +10,7 @@ on:
 jobs:
 
   build:
-    runs-on: ubuntu-jammy-16-cores-amd64
+    runs-on: ubuntu-jammy-8-cores-amd64
     env:
       CACHED_PATHS: |
         ~/.ccache
