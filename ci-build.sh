@@ -75,6 +75,10 @@ export PATH=`pwd`/bin:$PATH
 echo "PATH is $PATH"
 hash -r
 
+export CC := 'clang'
+export CXX := 'clang++'
+export CLANG_VERSION := '19'
+
 if test $CXX = 'clang++'; then
     RUN_PARTITIONS=$(seq 0 $((NPROCS-1)))
     # Use CLANG_VERSION environment variable if set, otherwise default to 12
