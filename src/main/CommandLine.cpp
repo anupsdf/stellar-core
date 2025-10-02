@@ -787,7 +787,7 @@ runCatchup(CommandLineArgs const& args)
             parseCatchup(catchupString, hash, completeValidation);
             return std::string{};
         }
-        catch (std::runtime_error& e)
+        catch (const std::runtime_error& e)
         {
             return std::string{e.what()};
         }

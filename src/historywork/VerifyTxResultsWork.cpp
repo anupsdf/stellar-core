@@ -127,7 +127,7 @@ VerifyTxResultsWork::verifyTxResultsOfCheckpoint()
         CLOG_ERROR(History, "{}", POSSIBLY_CORRUPTED_LOCAL_FS);
         return false;
     }
-    catch (std::runtime_error& e)
+    catch (const std::runtime_error& e)
     {
         CLOG_ERROR(History, "Transaction results failed verification: {}",
                    e.what());

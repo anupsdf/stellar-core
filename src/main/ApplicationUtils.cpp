@@ -346,7 +346,7 @@ selfCheck(Config cfg)
     {
         blc.checkEntireBucketlist();
     }
-    catch (std::runtime_error& e)
+    catch (const std::runtime_error& e)
     {
         LOG_ERROR(DEFAULT_LOG, "Error during bucket-list consistency check: {}",
                   e.what());

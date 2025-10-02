@@ -77,7 +77,7 @@ IndexBucketsWork<BucketT>::IndexWork::postWork()
                 }
                 // If we get an exception from an invalid index file, ignore it
                 // and reindex the Bucket.
-                catch (std::runtime_error&)
+                catch (const std::runtime_error&)
                 {
                     CLOG_WARNING(Bucket, "Invalid or corrupt index file: {}",
                                  indexFilename);

@@ -387,7 +387,7 @@ HerderImpl::writeDebugTxSet(LedgerCloseData const& lcd)
                          path.parent_path().string());
         }
     }
-    catch (std::runtime_error& e)
+    catch (const std::runtime_error& e)
     {
         CLOG_WARNING(Ledger, "Failed to dump debug tx set '{}': {}",
                      path.string(), e.what());

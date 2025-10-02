@@ -539,7 +539,7 @@ OverlayManagerImpl::resolvePeers(std::vector<string> const& peers)
         {
             addresses.push_back(PeerBareAddress::resolve(peer, mApp));
         }
-        catch (std::runtime_error& e)
+        catch (const std::runtime_error& e)
         {
             errors = true;
             CLOG_ERROR(Overlay, "Unable to resolve peer '{}': {}", peer,

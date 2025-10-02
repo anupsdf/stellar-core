@@ -49,7 +49,7 @@ GetHistoryArchiveStateWork::doWork()
             {
                 mState.load(mLocalFilename);
             }
-            catch (std::runtime_error& e)
+            catch (const std::runtime_error& e)
             {
                 CLOG_ERROR(History, "Error loading history state: {}",
                            e.what());

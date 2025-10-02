@@ -62,7 +62,7 @@ TmpDir::~TmpDir()
             LOG_DEBUG(DEFAULT_LOG, "TmpDir deleted: {}", *mPath);
         }
     }
-    catch (std::runtime_error& e)
+    catch (const std::runtime_error& e)
     {
         LOG_ERROR(DEFAULT_LOG, "Failed to delete TmpDir: {}, because: {}",
                   *mPath, e.what());

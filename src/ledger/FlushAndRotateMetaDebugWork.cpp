@@ -63,7 +63,7 @@ FlushAndRotateMetaDebugWork::doWork()
                 {
                     (*file)->close();
                 }
-                catch (std::runtime_error& e)
+                catch (const std::runtime_error& e)
                 {
                     // If we fail to close here, we're going to just eat the
                     // error and carry on to trying to gzip. Hopefully this

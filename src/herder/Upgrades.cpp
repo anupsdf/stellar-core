@@ -497,7 +497,7 @@ Upgrades::removeUpgrades(std::vector<UpgradeType>::const_iterator beginUpdates,
         {
             xdr::xdr_from_opaque(u, lu);
         }
-        catch (xdr::xdr_runtime_error&)
+        catch (const xdr::xdr_runtime_error&)
         {
             continue;
         }
@@ -548,7 +548,7 @@ Upgrades::isValidForApply(UpgradeType const& opaqueUpgrade,
     {
         xdr::xdr_from_opaque(opaqueUpgrade, upgrade);
     }
-    catch (xdr::xdr_runtime_error&)
+    catch (const xdr::xdr_runtime_error&)
     {
         return UpgradeValidity::XDR_INVALID;
     }
@@ -1282,7 +1282,7 @@ ConfigUpgradeSetFrame::makeFromKey(LedgerSnapshot const& ls,
     {
         xdr::xdr_from_opaque(bytes, upgradeSet);
     }
-    catch (xdr::xdr_runtime_error&)
+    catch (const xdr::xdr_runtime_error&)
     {
         return nullptr;
     }

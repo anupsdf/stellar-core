@@ -44,7 +44,7 @@ createIndex(BucketManager& bm, std::filesystem::path const& filename,
     }
     // BucketIndex throws if BucketManager shuts down before index finishes,
     // so return empty index instead of partial index
-    catch (std::runtime_error&)
+    catch (const std::runtime_error&)
     {
         return {};
     }

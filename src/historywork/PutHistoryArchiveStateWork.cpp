@@ -52,7 +52,7 @@ PutHistoryArchiveStateWork::doWork()
             spawnPublishWork();
             return State::WORK_RUNNING;
         }
-        catch (std::runtime_error& e)
+        catch (const std::runtime_error& e)
         {
             CLOG_ERROR(History, "Error saving history state: {}", e.what());
             CLOG_ERROR(History, "{}", POSSIBLY_CORRUPTED_LOCAL_FS);

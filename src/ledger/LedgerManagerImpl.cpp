@@ -1557,7 +1557,7 @@ LedgerManagerImpl::applyLedger(LedgerCloseData const& ledgerData,
             ltxUpgrade.commit();
             upgradeApplied = true;
         }
-        catch (std::runtime_error& e)
+        catch (const std::runtime_error& e)
         {
             CLOG_ERROR(Ledger, "Exception during upgrade: {}", e.what());
         }
@@ -1881,7 +1881,7 @@ LedgerManagerImpl::maybeResetLedgerCloseMetaDebugStream(uint32_t ledgerSeq)
                              metaDebugPath.parent_path().string());
             }
         }
-        catch (std::runtime_error& e)
+        catch (const std::runtime_error& e)
         {
             CLOG_WARNING(Ledger,
                          "Failed to open debug metadata stream '{}': {}",
