@@ -893,7 +893,7 @@ ProcessManagerImpl::maybeRunPendingProcesses()
             }
             mProcesses[pid] = i;
         }
-        catch (std::runtime_error& e)
+        catch (const std::runtime_error& e)
         {
             i->mImpl->cancel(std::make_error_code(std::errc::io_error));
             CLOG_ERROR(Process, "Error starting process: {}", e.what());

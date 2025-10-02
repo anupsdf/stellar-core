@@ -371,7 +371,7 @@ PendingEnvelopes::recvSCPEnvelope(SCPEnvelope const& envelope)
 
         return Herder::ENVELOPE_STATUS_FETCHING;
     }
-    catch (xdr::xdr_runtime_error& e)
+    catch (const xdr::xdr_runtime_error& e)
     {
         CLOG_TRACE(Herder,
                    "PendingEnvelopes::recvSCPEnvelope got corrupt message: {}",
@@ -398,7 +398,7 @@ PendingEnvelopes::discardSCPEnvelope(SCPEnvelope const& envelope)
 
         stopFetch(envelope);
     }
-    catch (xdr::xdr_runtime_error& e)
+    catch (const xdr::xdr_runtime_error& e)
     {
         CLOG_TRACE(
             Herder,

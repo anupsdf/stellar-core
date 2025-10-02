@@ -784,7 +784,7 @@ TCPPeer::recvMessage()
 
         valid = Peer::recvAuthenticatedMessage(std::move(am));
     }
-    catch (xdr::xdr_runtime_error& e)
+    catch (const xdr::xdr_runtime_error& e)
     {
         CLOG_ERROR(Overlay, "{} - recvMessage got a corrupt xdr: {}",
                    mIPAddress, e.what());

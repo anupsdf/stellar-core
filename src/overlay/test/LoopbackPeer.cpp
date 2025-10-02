@@ -268,7 +268,7 @@ LoopbackPeer::recvMessage(xdr::msg_ptr const& msg)
         }
         recvAuthenticatedMessage(std::move(am));
     }
-    catch (xdr::xdr_runtime_error& e)
+    catch (const xdr::xdr_runtime_error& e)
     {
         CLOG_ERROR(Overlay, "received corrupt xdr::msg_ptr {}", e.what());
         drop("received corrupted message",

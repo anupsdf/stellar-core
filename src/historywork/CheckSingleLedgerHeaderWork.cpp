@@ -150,7 +150,7 @@ CheckSingleLedgerHeaderWork::doWork()
             }
         }
     }
-    catch (xdr::xdr_runtime_error& e)
+    catch (const xdr::xdr_runtime_error& e)
     {
         CLOG_ERROR(History, "XDR error decoding {} from archive {}: {}",
                    mFt->localPath_nogz(), mArchive->getName(), e.what());
