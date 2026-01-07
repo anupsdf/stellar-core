@@ -170,8 +170,7 @@ CheckpointBuilder::appendLedgerHeader(LedgerHeader const& header,
     LedgerHeaderHistoryEntry lhe;
     lhe.header = header;
     lhe.hash = xdrSha256(header);
-    mLedgerHeaders->writeOne(lhe);
-    mLedgerHeaders->flush();
+    mLedgerHeaders->durableWriteOne(lhe);
 }
 
 uint32_t
@@ -261,32 +260,24 @@ CheckpointBuilder::cleanup(uint32_t lcl)
             out.open(tmpFile.string());
             XDRInputFileStream in;
             in.open(ft.localPath_nogz_dirty());
-            uint32_t lastReadLedgerSeq = 0;
+            uint32_t lastWrittenLedgerSeq = 0;
             while (in)
             {
                 try
                 {
                     if (!in.readOne(entry))
                     {
-                        // If file doesn't end on LCL, it's corrupt
-                        if (enforceLCL && lastReadLedgerSeq != lcl)
-                        {
-                            throw std::runtime_error(
-                                fmt::format("Corrupt checkpoint file {}, ends "
-                                            "on ledger {}, LCL is {}",
-                                            ft.localPath_nogz_dirty(),
-                                            getLedgerSeq(entry), lcl));
-                        }
                         break;
                     }
-                    lastReadLedgerSeq = getLedgerSeq(entry);
-                    if (lastReadLedgerSeq > lcl)
+                    auto entryLedgerSeq = getLedgerSeq(entry);
+                    if (entryLedgerSeq > lcl)
                     {
                         CLOG_INFO(History, "Truncating {} at ledger {}",
                                   ft.localPath_nogz_dirty(), lcl);
                         break;
                     }
                     out.writeOne(entry);
+                    lastWrittenLedgerSeq = entryLedgerSeq;
                 }
                 catch (xdr::xdr_runtime_error const& e)
                 {
@@ -297,6 +288,16 @@ CheckpointBuilder::cleanup(uint32_t lcl)
                               ft.localPath_nogz_dirty());
                     break;
                 }
+            }
+            // Validate file ends on LCL after processing (handles both normal
+            // EOF and partial write cases)
+            if (enforceLCL && lastWrittenLedgerSeq != lcl)
+            {
+                throw std::runtime_error(
+                    fmt::format("Corrupt checkpoint file {}, ends "
+                                "on ledger {}, LCL is {}",
+                                ft.localPath_nogz_dirty(), lastWrittenLedgerSeq,
+                                lcl));
             }
         }
 
